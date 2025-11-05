@@ -1,0 +1,1955 @@
+dd<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hong Kong Finder</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+     
+    <!-- Leaflet.js JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <!-- JSZip for KMZ handling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+     
+    <style>
+        /* Set map height */
+        #map { 
+            height: 100vh; 
+            width: 100%;
+            /* Ensure map is behind overlays */
+            z-index: 10;
+        }
+        
+        /* Custom Leaflet Icon Style for Car Parks */
+        .carpark-icon {
+            background-color: #007BFF;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        /* Custom Leaflet Icon Style for Attractions (Mountain SVG) */
+        .mountain-icon {
+            background-color: #22c55e; /* green-500 */
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        .mountain-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        /* Custom Leaflet Icon Style for Viewing Points (Viewer SVG) */
+        .viewer-icon {
+            background-color: #f59e0b; /* yellow-500 */
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        .viewer-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+        
+        /* Custom Leaflet Icon Style for Parking Meters (Car SVG) */
+        .parking-meter-icon {
+            background-color: #8b5cf6; /* purple-500 */
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        .parking-meter-icon svg {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+
+        /* Language Switcher Styles */
+        .lang-btn.active {
+            background-color: #007BFF;
+            color: white;
+        }
+        .lang-btn:not(.active) {
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+            color: #374151; /* Tailwind gray-700 */
+        }
+        .lang-btn:not(.active):hover {
+            background-color: #e5e7eb; /* Tailwind gray-200 */
+        }
+
+        /* Layer Control Styles */
+        #layer-control {
+            top: 1rem; /* 16px */
+            left: 1rem; /* 16px */
+            z-index: 1000;
+            background-color: white;
+            padding: 0.75rem; /* 12px */
+            border-radius: 0.5rem; /* 8px */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        #layer-control label {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem; /* 8px */
+            font-size: 0.875rem; /* 14px */
+            color: #1f2937; /* gray-800 */
+            cursor: pointer;
+        }
+        #layer-control label:last-child {
+            margin-bottom: 0;
+        }
+        #layer-control input[type="checkbox"] {
+            margin-right: 0.5rem; /* 8px */
+            height: 1rem; /* 16px */
+            width: 1rem; /* 16px */
+            border-radius: 0.25rem; /* 4px */
+            border-color: #9ca3af; /* gray-400 */
+            color: #007BFF; /* blue-600 */
+            cursor: pointer;
+        }
+         /* Ensure overlays are on top */
+        .leaflet-pane {
+             z-index: 10;
+        }
+        .leaflet-control-container {
+            z-index: 1000;
+        }
+        /* Leaflet Popup Customization */
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.5rem; /* 8px */
+        }
+        .leaflet-popup-content {
+            margin: 12px 16px;
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 280px; /* Ensure popup isn't too wide */
+            box-sizing: border-box;
+        }
+        .popup-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .popup-row {
+            margin-bottom: 4px;
+        }
+        .popup-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .popup-list-item {
+            display: block;
+            margin-left: 1rem;
+            text-indent: -1rem;
+            padding-left: 1rem;
+            margin-top: 4px;
+        }
+        /* Navigation Button Style */
+        .navigate-btn {
+            background-color: #007BFF;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 0.375rem; /* 6px */
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 12px;
+            width: 100%;
+            transition: background-color 0.2s;
+            box-sizing: border-box; /* Ensure padding doesn't break layout */
+        }
+        .navigate-btn:hover {
+            background-color: #0056b3;
+        }
+
+        /* Tooltip Navigation Button */
+        .tooltip-navigate-btn {
+             background-color: #f3f4f6; /* gray-100 */
+             color: #1f2937; /* gray-800 */
+             padding: 4px 8px;
+             border-radius: 0.25rem; /* 4px */
+             border: 1px solid #d1d5db; /* gray-300 */
+             cursor: pointer;
+             font-size: 12px;
+             font-weight: 500;
+             margin-top: 6px;
+             display: inline-block;
+        }
+        .tooltip-navigate-btn:hover {
+            background-color: #e5e7eb; /* gray-200 */
+        }
+
+        /* Leaflet Routing Machine Panel */
+        .leaflet-routing-container {
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        /* Custom route panel styling */
+        .custom-route-panel {
+            position: absolute;
+            top: 100px;
+            right: 10px;
+            z-index: 1000;
+            max-width: 350px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            padding: 10px;
+            font-family: Arial, sans-serif;
+        }
+
+        /* User location icon */
+        .user-location-icon {
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        /* Navigation notification */
+        .navigation-notification {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            z-index: 2000;
+            max-width: 90%;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        /* Turn restriction icon */
+        .turn-restriction-icon {
+            background-color: #ff4444;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 12px;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+
+        .navigation-notification.fade-out {
+            animation: fadeOut 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateX(-50%) translateY(0); }
+            to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+    </style>
+</head>
+<body class="font-sans antialiased relative overflow-hidden">
+
+    <!-- Language Switcher -->
+    <div id="lang-switcher" class="absolute top-4 right-4 z-[1000] bg-white rounded-lg shadow-md p-1 flex space-x-1">
+        <button data-lang="en_US" class="lang-btn px-3 py-1 text-sm font-medium rounded-md">EN</button>
+        <button data-lang="zh_TW" class="lang-btn px-3 py-1 text-sm font-medium rounded-md">繁</button>
+        <button data-lang="zh_CN" class="lang-btn px-3 py-1 text-sm font-medium rounded-md">简</button>
+    </div>
+
+    <!-- Locate User Button -->
+    <button id="locate-btn" class="absolute top-16 right-4 z-[1000] bg-white rounded-lg shadow-md p-2 flex items-center justify-center cursor-pointer hover:bg-gray-100" title="Find my location">
+        <svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <!-- Crosshairs icon -->
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12a3 3 0 116 0 3 3 0 01-6 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m-9-9h1m16 0h1"></path>
+        </svg>
+    </button>
+
+    <!-- Layer Control -->
+    <div id="layer-control" class="absolute">
+        <label>
+            <input type="checkbox" id="toggle-carparks" checked>
+            <span id="label-carparks">Car Parks</span>
+        </label>
+        <label>
+            <input type="checkbox" id="toggle-attractions">
+            <span id="label-attractions">Park Attractions</span>
+        </label>
+        <label>
+            <input type="checkbox" id="toggle-viewing-points">
+            <span id="label-viewing-points">Viewing Points</span>
+        </label>
+        <label>
+            <input type="checkbox" id="toggle-parking-meters">
+            <span id="label-parking-meters">Parking Meters</span>
+        </label>
+    </div>
+
+    <!-- Map Container -->
+    <div id="map"></div>
+    
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="hidden absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-[5000]">
+        <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
+    </div>
+    
+    <!-- Information Modal -->
+    <div id="info-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[4000] p-4 transition-opacity duration-300">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center p-4 border-b">
+                <h2 id="modal-title" class="text-xl font-bold text-gray-800">Car Park Details</h2>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            
+            <!-- Modal Content -->
+            <div id="modal-content" class="p-6 space-y-4">
+                <!-- Content will be injected by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let currentLang = 'en_US'; // Default language
+        let markerLayer = null; // To store and clear carpark markers
+        let attractionsLayer = null; // To store and clear attraction markers
+        let viewingPointsLayer = null; // To store and clear viewing point markers
+        let parkingMetersLayer = null; // To store and clear parking meter markers
+        let allAttractionsData = null; // Cache for attractions data
+        let allViewingPointsData = null; // Cache for viewing points data
+        let allParkingMetersData = null; // Cache for parking meter location data
+        let parkingMeterStatusMap = new Map(); // Cache for parking meter status
+        let turnRestrictionsLayer = null; // To store turn restriction markers
+        let allTurnRestrictionsData = null; // Cache for turn restrictions data
+        let moveEndTimer = null; // Debounce timer for map movement
+        let userLocationMarker = null; // Marker for user's location
+        let userLocationCircle = null; // Accuracy circle for user's location
+        let routingControl = null; // To store the routing control
+        let routePanel = null; // To store the route instructions panel
+        let navigationMode = false; // Flag for navigation mode
+        let positionWatchId = null; // ID for position watching
+        let currentRoute = null; // Current route data
+        let currentInstructionIndex = 0; // Current instruction being followed
+        let navigationNotification = null; // Notification element for navigation
+        let warnedTurnRestrictions = new Set(); // Track warned turn restrictions
+        let routeTurnRestrictionsLayer = null; // Layer for turn restrictions along current route
+        let routeTurnRestrictions = []; // Turn restrictions along current route
+
+        // --- i18n Translation Object ---
+        const i18n = {
+            'en_US': {
+                modalTitle: 'Car Park Details',
+                address: 'Address',
+                parkId: 'Park ID',
+                status: 'Status',
+                vacancy: 'Vacancy',
+                vac_car: 'Vacancy (Car)',
+                vac_moto: 'Vacancy (Motorcycle)',
+                vac_lgv: 'Vacancy (LGV)',
+                vac_hgv: 'Vacancy (HGV)',
+                vac_coach: 'Vacancy (Coach)',
+                price_car: 'Hourly Price (Car)',
+                heightLimit: 'Height Limit',
+                remarks: 'Remarks',
+                notAvailable: 'N/A',
+                noVacancyData: 'No vacancy data available',
+                errorTitle: 'Error',
+                errorBody: 'Could not load car park data. Please try again later.',
+                toggleCarParks: 'Car Parks',
+                toggleAttractions: 'Country Park Attractions',
+                toggleViewingPoints: 'Viewing Points',
+                toggleParkingMeters: 'Parking Meters',
+                attractionErrorBody: 'Could not load park attractions. Please try again later.',
+                viewingPointErrorBody: 'Could not load viewing points. Please try again later.',
+                parkingMeterErrorBody: 'Could not load parking meters for this area. Please try again later.',
+                website: 'Website',
+                countryPark: 'Country Park',
+                street: 'Street',
+                sectionOfStreet: 'Section',
+                vehicleType: 'Vehicle Type',
+                operatingPeriod: 'Operating Period',
+                totalMeters: 'Total Meters',
+                availableMeters: 'Available',
+                occupiedMeters: 'Occupied',
+                geolocationError: 'Geolocation error: Could not find your location.',
+                userLocationPopup: 'You are within {accuracy} meters of this point.',
+                navigate: 'Navigate (Directions)',
+                openInMaps: 'Open in Google Maps',
+                vehicle_A: 'Any Vehicles (other than Medium and Heavy Goods Vehicles, Buses, Motor Cycles and Pedal Cycles)',
+                vehicle_C: 'Coaches',
+                vehicle_G: 'Goods Vehicles',
+                op_F: '08.00 am - 09.00 pm daily',
+                op_N: '07.00 pm - Midnight daily',
+                op_P: '08.00 am - 08.00 pm daily on Mondays to Saturdays (no parking on Sundays)',
+                op_D: '08.00 am - Midnight on Mondays to Saturdays; 10.00 am - 10.00 pm on Sundays and public holidays',
+                op_S: 'No parking on 08.00 am - 05.00 pm daily on Mondays to Fridays; 05.00 pm - Midnight daily on Mondays to Fridays; 08.00 am - Midnight daily on Saturdays; 10.00 am - 10.00 pm daily on Sundays and public holidays',
+                op_H: '08:00 am - 08:00 pm daily',
+                op_E: '07:00 am - 08:00 pm daily',
+                op_Q: '08:00 am - 08:00 pm daily on Mondays to Saturdays; 10:00 am - 10:00 pm daily on Sundays and public holidays',
+                op_J: '08:00 am - Midnight daily',
+                op_A: '08:00 am - Midnight on Mondays to Saturdays (except Sundays and public holidays)',
+                op_B: '08:00 am - 08:00 pm daily on Mondays to Saturdays (except Sundays and public holidays)',
+                unknown: 'Unknown'
+            },
+            'zh_TW': {
+                modalTitle: '停車場詳情',
+                address: '地址',
+                parkId: '停車場ID',
+                status: '狀態',
+                vacancy: '空位',
+                vac_car: '空位 (私家車)',
+                vac_moto: '空位 (電單車)',
+                vac_lgv: '空位 (輕型貨車)',
+                vac_hgv: '空位 (重型貨車)',
+                vac_coach: '空位 (巴士)',
+                price_car: '每小時收費 (私家車)',
+                heightLimit: '高度限制',
+                remarks: '備註',
+                notAvailable: '沒有資料',
+                noVacancyData: '沒有空位資料',
+                errorTitle: '錯誤',
+                errorBody: '無法加載停車場資料，請稍後再試。',
+                toggleCarParks: '停車場',
+                toggleAttractions: '郊野公園景點',
+                toggleViewingPoints: '觀景台',
+                toggleParkingMeters: '咪錶泊車位',
+                attractionErrorBody: '無法加載郊野公園景點，請稍後再試。',
+                viewingPointErrorBody: '無法加載觀景台資料，請稍後再試。',
+                parkingMeterErrorBody: '無法加載此區域的咪錶泊車位，請稍後再試。',
+                website: '網站',
+                countryPark: '郊野公園',
+                street: '街道',
+                sectionOfStreet: '路段',
+                vehicleType: '車輛類別',
+                operatingPeriod: '運作時段',
+                totalMeters: '總車位數',
+                availableMeters: '空置',
+                occupiedMeters: '已佔用',
+                geolocationError: '定位錯誤：無法找到您的位置。',
+                userLocationPopup: '您在此地點 {accuracy} 米範圍內。',
+                navigate: '導航 (路線)',
+                openInMaps: '在 Google 地圖中開啟',
+                vehicle_A: '任何車輛 (中型及重型貨車、巴士、電單車及機動三輪車除外)',
+                vehicle_C: '長途汽車',
+                vehicle_G: '貨車',
+                op_F: '每天上午 8 點至晚上 9 點',
+                op_N: '每天 07:00 - 午夜',
+                op_P: '週一至週六每天上午 8:00 至晚上 8:00（週日禁止停車）',
+                op_D: '週一至週六上午 08:00 至午夜； 週日和公眾假期上午 10 點至晚上 10 點',
+                op_S: '週一至週五每天上午 8 點至下午 5 點禁止停車； 下午 05:00 - 週一至週五每天午夜； 週六每天上午 8 點至午夜； 週日和公眾假期每天上午 10 點至晚上 10 點',
+                op_H: '每天上午8時至晚上8時',
+                op_E: '每天上午7時至晚上8時',
+                op_Q: '逢星期一至六上午8時至晚上8時；星期日及公眾假期上午10時至晚上10時',
+                op_J: '每天上午8時至午夜',
+                op_A: '逢星期一至六上午8時至午夜 (星期日及公眾假期除外)',
+                op_B: '逢星期一至六上午8時至晚上8時 (星期日及公眾假期除外)',
+                unknown: '不詳'
+            },
+            'zh_CN': {
+                modalTitle: '停车场详情',
+                address: '地址',
+                parkId: '停车场ID',
+                status: '状态',
+                vacancy: '空位',
+                vac_car: '空位 (私家车)',
+                vac_moto: '空位 (摩托车)',
+                vac_lgv: '空位 (轻型货车)',
+                vac_hgv: '空位 (重型货V车)',
+                vac_coach: '空位 (巴士)',
+                price_car: '每小时收费 (私家车)',
+                heightLimit: '高度限制',
+                remarks: '备注',
+                notAvailable: '没有资料',
+                noVacancyData: '没有空位资料',
+                errorTitle: '错误',
+                errorBody: '无法加载停车场资料，请稍后再试。',
+                toggleCarParks: '停车场',
+                toggleAttractions: '郊野公园景点',
+                toggleViewingPoints: '观景台',
+                toggleParkingMeters: '咪表泊车位',
+                attractionErrorBody: '无法加载郊野公园景点，请稍后再试。',
+                viewingPointErrorBody: '无法加载观景台资料，请稍后再试。',
+                parkingMeterErrorBody: '无法加载此区域的咪表泊车位，请稍后再试。',
+                website: '网站',
+                countryPark: '郊野公园',
+                street: '街道',
+                sectionOfStreet: '路段',
+                vehicleType: '车辆类别',
+                operatingPeriod: '运作时段',
+                totalMeters: '总车位数',
+                availableMeters: '空置',
+                occupiedMeters: '已占用',
+                geolocationError: '定位错误：无法找到您的位置。',
+                userLocationPopup: '您在此地点 {accuracy} 米范围内。',
+                navigate: '导航 (路线)',
+                openInMaps: '在 Google 地图中打开',
+                vehicle_A: '任何车辆 (中型及重型货车、巴士、摩托车及机动三ML车除外)',
+                vehicle_C: '长途汽车',
+                vehicle_G: '货车',
+                op_F: '每天上午 8 点至晚上 9 点',
+                op_N: '每天 07:00 - 午夜',
+                op_P: '周一至周六每天上午 8:00 至晚上 8:00（周日禁止停车）',
+                op_D: '周一至周六上午 08:00 至午夜； 周日和公众假期上午 10 点至晚上 10 点',
+                op_S: '周一至周五每天上午 8 点至下午 5 点禁止停车； 下午 05:00 - 周一至周五每天午夜； 周六每天上午 8 点至午夜； 周日和公众假期每天上午 10 点至晚上 10 点',
+                op_H: '每天上午8时至晚上8时',
+                op_E: '每天上午7时至晚上8时',
+                op_Q: '逢星期一至六上午8时至晚上8时；星期日及公众假期上午10时至晚上10时',
+                op_J: '每天上午8时至午夜',
+                op_A: '逢星期一至六上午8时至午夜 (星期日及公众假期除外)',
+                op_B: '逢星期一至六上午8时至晚上8时 (星期日及公众假期除外)',
+                unknown: '不详'
+            },
+        };
+
+        // --- Leaflet & Map Setup ---
+        
+        // Center map on Hong Kong
+        const map = L.map('map').setView([22.3193, 114.1694], 12);
+        
+        // Initialize marker layers
+        markerLayer = L.layerGroup().addTo(map); // Car parks, on by default
+        attractionsLayer = L.layerGroup(); // Attractions, off by default
+        viewingPointsLayer = L.layerGroup(); // Viewing Points, off by default
+        parkingMetersLayer = L.layerGroup(); // Parking Meters, off by default
+        turnRestrictionsLayer = L.layerGroup(); // Turn restrictions, off by default
+        routeTurnRestrictionsLayer = L.layerGroup(); // Route-specific turn restrictions, only visible during navigation
+
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // --- API URLs ---
+        const API_INFO_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info';
+        const API_VACANCY_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=vacancy';
+        const API_ATTRACTIONS_URL = 'https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1728896853370_57183/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Attractions_in_Country_Parks&outputFormat=geojson';
+        const API_VIEWING_POINTS_URL = 'https://portal.csdi.gov.hk/server/services/common/afcd_rcd_1635142967951_6079/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=Viewing_Point&outputFormat=geojson&maxFeatures=100';
+        const API_PARKING_METERS_BASE_URL = 'https://portal.csdi.gov.hk/server/services/common/td_rcd_1638930345315_81787/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=parkingspaces&outputFormat=geojson&srsName=EPSG:4326';
+        const API_PARKING_METERS_STATUS_URL = 'https://resource.data.one.gov.hk/td/psiparkingspaces/occupancystatus/occupancystatus.csv';
+        const API_TURN_RESTRICTIONS_URL = 'https://static.data.gov.hk/td/road-network-v2/TURN.kmz';
+
+        // --- DOM Elements ---
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const infoModal = document.getElementById('info-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const langSwitcher = document.getElementById('lang-switcher');
+        const langButtons = document.querySelectorAll('.lang-btn');
+        const toggleCarparks = document.getElementById('toggle-carparks');
+        const toggleAttractions = document.getElementById('toggle-attractions');
+        const toggleViewingPoints = document.getElementById('toggle-viewing-points');
+        const toggleParkingMeters = document.getElementById('toggle-parking-meters');
+        const labelCarparks = document.getElementById('label-carparks');
+        const labelAttractions = document.getElementById('label-attractions');
+        const labelViewingPoints = document.getElementById('label-viewing-points');
+        const labelParkingMeters = document.getElementById('label-parking-meters');
+        const locateBtn = document.getElementById('locate-btn');
+
+        // Turn restrictions are now only shown during navigation, no toggle needed
+        
+        // --- Modal Controls ---
+        closeModalBtn.addEventListener('click', () => {
+            infoModal.classList.add('hidden');
+        });
+        
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                infoModal.classList.add('hidden');
+            }
+        });
+
+        // --- Language Switcher Controls ---
+        function updateLangUI() {
+            // Update buttons
+            langButtons.forEach(btn => {
+                if (btn.dataset.lang === currentLang) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            // Update layer control labels
+            const t = i18n[currentLang];
+            labelCarparks.textContent = t.toggleCarParks;
+            labelAttractions.textContent = t.toggleAttractions;
+            labelViewingPoints.textContent = t.toggleViewingPoints;
+            labelParkingMeters.textContent = t.toggleParkingMeters;
+        }
+
+        langSwitcher.addEventListener('click', (e) => {
+            const target = e.target.closest('.lang-btn');
+            if (!target) return;
+
+            const newLang = target.dataset.lang;
+            if (newLang === currentLang) return; // No change
+
+            currentLang = newLang;
+            updateLangUI(); // Update UI
+
+            // Refetch/replot data
+            loadCarparkData();
+            plotAttractions(); // Re-plot attractions with new language tooltips
+            plotViewingPoints(); // Re-plot viewing points with new language tooltips
+            plotParkingMeters(); // Re-plot parking meters with new language popups
+        });
+
+        // --- Layer Toggle Controls ---
+        toggleCarparks.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(markerLayer);
+            } else {
+                map.removeLayer(markerLayer);
+            }
+        });
+
+        toggleAttractions.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(attractionsLayer);
+                // Load data if it's not already cached
+                if (!allAttractionsData) {
+                    loadAttractionsData();
+                }
+            } else {
+                map.removeLayer(attractionsLayer);
+            }
+        });
+
+        toggleViewingPoints.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(viewingPointsLayer);
+                // Load data if it's not already cached
+                if (!allViewingPointsData) {
+                    loadViewingPointsData();
+                }
+            } else {
+                map.removeLayer(viewingPointsLayer);
+            }
+        });
+        
+        toggleParkingMeters.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(parkingMetersLayer);
+                // Load data for the current view
+                loadParkingMetersData();
+            } else {
+                map.removeLayer(parkingMetersLayer);
+            }
+        });
+
+
+        // --- Geolocation Controls ---
+        locateBtn.addEventListener('click', () => {
+            map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
+        });
+
+        map.on('locationfound', (e) => {
+            const t = i18n[currentLang];
+            // Clear previous location markers
+            if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+            }
+            if (userLocationCircle) {
+                map.removeLayer(userLocationCircle);
+            }
+
+            // Add new markers
+            const radius = e.accuracy;
+            const popupText = t.userLocationPopup.replace('{accuracy}', radius.toFixed(0));
+            
+            userLocationMarker = L.marker(e.latlng).addTo(map)
+                .bindPopup(popupText).openPopup();
+            
+            userLocationCircle = L.circle(e.latlng, radius).addTo(map);
+
+            // Close popup after 4 seconds
+            setTimeout(() => {
+                if (userLocationMarker) {
+                    userLocationMarker.closePopup();
+                }
+            }, 4000);
+        });
+
+        map.on('locationerror', (e) => {
+            const t = i18n[currentLang];
+            console.error(t.geolocationError, e.message);
+            // We could show a modal, but for now, console error is non-intrusive
+        });
+
+        // --- Navigation Helper ---
+        function handleNavigationClick(destLat, destLon) {
+            const t = i18n[currentLang];
+            const destination = L.latLng(destLat, destLon);
+
+            // Close the car park information modal
+            infoModal.classList.add('hidden');
+
+            // Clear previous route
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+
+            // Create a custom route panel
+            if (routePanel) {
+                routePanel.remove();
+                routePanel = null;
+            }
+
+            routePanel = L.DomUtil.create('div', 'custom-route-panel');
+            document.body.appendChild(routePanel);
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // Got user location
+                        const origin = L.latLng(position.coords.latitude, position.coords.longitude);
+
+                        routingControl = L.Routing.control({
+                            waypoints: [
+                                origin,
+                                destination
+                            ],
+                            routeWhileDragging: false,
+                            showAlternatives: true, // Enable alternative routes
+                            altLineOptions: {
+                                styles: [
+                                    {color: 'black', opacity: 0.15, weight: 12},
+                                    {color: 'white', opacity: 0.8, weight: 8},
+                                    {color: 'blue', opacity: 0.8, weight: 4}
+                                ]
+                            },
+                            lineOptions: {
+                                styles: [
+                                    {color: 'black', opacity: 0.15, weight: 12},
+                                    {color: 'white', opacity: 0.8, weight: 8},
+                                    {color: 'blue', opacity: 0.8, weight: 4}
+                                ]
+                            },
+                            show: false, // Don't show default panel
+                            addWaypoints: false,
+                            draggableWaypoints: false,
+                            fitSelectedRoutes: true,
+                            createMarker: function(i, wp) {
+                                // Custom markers for start and end points
+                                if (i === 0) { // Start point (user location)
+                                    return L.marker(wp.latLng, {
+                                        icon: L.divIcon({
+                                            className: 'user-location-icon',
+                                            html: '<div style="background-color: #4CAF50; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">S</div>',
+                                            iconSize: [20, 20],
+                                            iconAnchor: [10, 10]
+                                        })
+                                    }).bindPopup(t.userLocationPopup.replace('{accuracy}', '0'));
+                                } else { // Destination
+                                    return L.marker(wp.latLng, {
+                                        icon: createCarparkIcon()
+                                    });
+                                }
+                            },
+                            router: L.Routing.osrmv1({
+                                serviceUrl: 'https://router.project-osrm.org/route/v1',
+                                profile: 'driving',
+                                language: currentLang === 'en_US' ? 'en' : (currentLang === 'zh_TW' ? 'zh-CN' : 'zh-CN') // Adjust language for routing instructions
+                            })
+                        }).addTo(map);
+
+                        // Custom handling for route found
+                        routingControl.on('routesfound', function(e) {
+                            const routes = e.routes;
+                            currentRoute = routes[0]; // Store the current route
+                            currentInstructionIndex = 0; // Reset instruction index
+                            const summary = routes[0].summary;
+
+                            // Enter navigation mode first
+                            navigationMode = true;
+                            console.log('Entered navigation mode');
+
+                            // Ensure turn restrictions data is loaded before filtering
+                            if (!allTurnRestrictionsData) {
+                                console.log('Loading turn restrictions data...');
+                                loadTurnRestrictionsData().then(() => {
+                                    console.log('Turn restrictions data loaded, filtering along route');
+                                    filterTurnRestrictionsAlongRoute(routes[0]);
+                                    console.log('Adding routeTurnRestrictionsLayer to map');
+                                    map.addLayer(routeTurnRestrictionsLayer);
+                                    console.log('routeTurnRestrictionsLayer added to map, has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
+                                });
+                            } else {
+                                console.log('Turn restrictions data already loaded, filtering along route');
+                                filterTurnRestrictionsAlongRoute(routes[0]);
+                                console.log('Adding routeTurnRestrictionsLayer to map');
+                                map.addLayer(routeTurnRestrictionsLayer);
+                                console.log('routeTurnRestrictionsLayer added to map, has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
+                            }
+
+                            startNavigation();
+
+                            // Display route information in our custom panel
+                            const distance = (summary.totalDistance / 1000).toFixed(2);
+                            const time = (summary.totalTime / 60).toFixed(1);
+
+                            // Create route options if alternatives exist
+                            let routeOptions = '';
+                            if (routes.length > 1) {
+                                routeOptions = '<div style="margin-bottom: 10px;"><strong>Select Route:</strong><select id="route-selector" style="margin-left: 10px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">';
+                                routes.forEach((route, index) => {
+                                    const routeDistance = (route.summary.totalDistance / 1000).toFixed(2);
+                                    const routeTime = (route.summary.totalTime / 60).toFixed(1);
+                                    routeOptions += `<option value="${index}">Route ${index + 1}: ${routeDistance} km, ${routeTime} min</option>`;
+                                });
+                                routeOptions += '</select></div>';
+                            }
+
+                            routePanel.innerHTML = `
+                                <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 350px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <h3 style="margin: 0; font-size: 18px; font-weight: bold;">${t.navigate}</h3>
+                                        <button id="close-route-btn" style="background: none; border: none; font-size: 18px; cursor: pointer;">×</button>
+                                    </div>
+                                    ${routeOptions}
+                                    <div style="font-size: 14px; margin-bottom: 10px;">
+                                        <div><strong>Distance:</strong> ${distance} km</div>
+                                        <div><strong>Estimated Time:</strong> ${time} min</div>
+                                    </div>
+                                    <div style="max-height: 300px; overflow-y: auto;">
+                                        <ol style="padding-left: 20px; margin: 0;" id="route-instructions">
+                                            ${routes[0].instructions.map(instruction =>
+                                                `<li style="margin-bottom: 8px; font-size: 14px; line-height: 1.4;">${instruction.text}</li>`
+                                            ).join('')}
+                                        </ol>
+                                    </div>
+                                    <button id="stop-nav-btn" style="margin-top: 10px; padding: 10px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 14px; font-weight: bold;">Stop Navigation</button>
+                                </div>
+                            `;
+
+                            // Add event listeners for close and stop buttons
+                            document.getElementById('close-route-btn').addEventListener('click', clearRoute);
+                            document.getElementById('stop-nav-btn').addEventListener('click', stopNavigation);
+
+                            // Add route selector functionality
+                            const routeSelector = document.getElementById('route-selector');
+                            if (routeSelector) {
+                                routeSelector.addEventListener('change', function() {
+                                    const selectedRouteIndex = parseInt(this.value);
+                                    const selectedRoute = routes[selectedRouteIndex];
+                                    currentRoute = selectedRoute; // Update current route
+                                    currentInstructionIndex = 0; // Reset
+                                    warnedTurnRestrictions.clear(); // Reset warnings
+
+                                    // Filter turn restrictions for new route
+                                    if (!allTurnRestrictionsData) {
+                                        loadTurnRestrictionsData().then(() => {
+                                            filterTurnRestrictionsAlongRoute(selectedRoute);
+                                        });
+                                    } else {
+                                        filterTurnRestrictionsAlongRoute(selectedRoute);
+                                    }
+
+                                    const selectedDistance = (selectedRoute.summary.totalDistance / 1000).toFixed(2);
+                                    const selectedTime = (selectedRoute.summary.totalTime / 60).toFixed(1);
+
+                                    // Update displayed distance and time
+                                    const distanceElement = routePanel.querySelector('div:nth-child(3) div:first-child');
+                                    const timeElement = routePanel.querySelector('div:nth-child(3) div:nth-child(2)');
+                                    distanceElement.innerHTML = `<strong>Distance:</strong> ${selectedDistance} km`;
+                                    timeElement.innerHTML = `<strong>Estimated Time:</strong> ${selectedTime} min`;
+
+                                    // Update instructions
+                                    const instructionsElement = document.getElementById('route-instructions');
+                                    instructionsElement.innerHTML = selectedRoute.instructions.map(instruction =>
+                                        `<li style="margin-bottom: 8px; font-size: 14px; line-height: 1.4;">${instruction.text}</li>`
+                                    ).join('');
+
+                                    // Highlight selected route on map
+                                    routingControl.route(selectedRouteIndex);
+                                });
+                            }
+                        });
+
+                        // Handle routing errors
+                        routingControl.on('routingerror', function(e) {
+                            console.error('Routing error:', e.error);
+                            routePanel.innerHTML = `
+                                <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
+                                    <h3 style="margin: 0 0 10px 0; font-size: 16px;">Routing Error</h3>
+                                    <p style="font-size: 14px; margin: 0;">Could not calculate route. Please try again.</p>
+                                    <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
+                                </div>
+                            `;
+                            document.getElementById('close-route-btn').addEventListener('click', clearRoute);
+                        });
+                    },
+                    (err) => {
+                        // Failed to get user location, show error
+                        console.error(t.geolocationError, err.message);
+                        routePanel.innerHTML = `
+                            <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
+                                <h3 style="margin: 0 0 10px 0; font-size: 16px;">Location Error</h3>
+                                <p style="font-size: 14px; margin: 0;">${t.geolocationError}</p>
+                                <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
+                            </div>
+                        `;
+                        document.getElementById('close-route-btn').addEventListener('click', clearRoute);
+                    }
+                );
+            } else {
+                // Geolocation not supported
+                console.error(t.geolocationError, 'Geolocation is not supported by this browser.');
+                routePanel.innerHTML = `
+                    <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
+                        <h3 style="margin: 0 0 10px 0; font-size: 16px;">Browser Error</h3>
+                        <p style="font-size: 14px; margin: 0;">Geolocation is not supported by your browser.</p>
+                        <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
+                    </div>
+                `;
+                document.getElementById('close-route-btn').addEventListener('click', clearRoute);
+            }
+        }
+
+        function clearRoute() {
+            stopNavigation(); // Stop navigation if active
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+            if (routePanel) {
+                routePanel.remove();
+                routePanel = null;
+            }
+        }
+
+        // --- Navigation Mode Functions ---
+        function startNavigation() {
+            if (!navigationMode || !currentRoute) return;
+
+            // Start watching position
+            if (navigator.geolocation) {
+                positionWatchId = navigator.geolocation.watchPosition(
+                    handlePositionUpdate,
+                    (error) => console.error('Position watch error:', error),
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 5000
+                    }
+                );
+            }
+        }
+
+        function stopNavigation() {
+            navigationMode = false;
+            currentRoute = null;
+            currentInstructionIndex = 0;
+            warnedTurnRestrictions.clear(); // Reset warned restrictions
+
+            // Clear route-specific turn restrictions and remove layer from map
+            if (routeTurnRestrictionsLayer) {
+                routeTurnRestrictionsLayer.clearLayers();
+                if (map.hasLayer(routeTurnRestrictionsLayer)) {
+                    map.removeLayer(routeTurnRestrictionsLayer);
+                }
+            }
+            routeTurnRestrictions = [];
+
+            // Clear navigation notification
+            if (navigationNotification) {
+                navigationNotification.remove();
+                navigationNotification = null;
+            }
+
+            // Stop watching position
+            if (positionWatchId !== null) {
+                navigator.geolocation.clearWatch(positionWatchId);
+                positionWatchId = null;
+            }
+        }
+
+        function filterTurnRestrictionsAlongRoute(route) {
+            console.log('Starting filterTurnRestrictionsAlongRoute');
+            if (!allTurnRestrictionsData || !allTurnRestrictionsData.features) {
+                console.log('No turn restrictions data available');
+                return;
+            }
+
+            routeTurnRestrictionsLayer.clearLayers();
+            routeTurnRestrictions = [];
+
+            const routeCoordinates = route.coordinates;
+            const routeBuffer = 100; // meters buffer around route (increased for better coverage)
+
+            console.log('Filtering turn restrictions for route with', routeCoordinates.length, 'coordinates');
+            console.log('Route coordinates sample:', routeCoordinates.slice(0, 5));
+
+            allTurnRestrictionsData.features.forEach((feature, index) => {
+                const { geometry, properties } = feature;
+                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) {
+                    console.log('Skipping feature', index, 'due to invalid geometry');
+                    return;
+                }
+
+                const restrictionLatLng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
+                console.log('Processing turn restriction:', properties.name, 'at', restrictionLatLng);
+
+                // Check if turn restriction is near the route
+                let isNearRoute = false;
+                let minDistance = Infinity;
+
+                for (let i = 0; i < routeCoordinates.length - 1; i++) {
+                    const segmentStart = L.latLng(routeCoordinates[i][1], routeCoordinates[i][0]);
+                    const segmentEnd = L.latLng(routeCoordinates[i + 1][1], routeCoordinates[i + 1][0]);
+
+                    // Calculate distance from point to line segment
+                    const distance = pointToLineDistance(restrictionLatLng, segmentStart, segmentEnd);
+                    minDistance = Math.min(minDistance, distance);
+
+                    if (distance <= routeBuffer) {
+                        isNearRoute = true;
+                        console.log('Turn restriction within buffer at segment', i, 'distance:', distance);
+                        break;
+                    }
+                }
+
+                if (isNearRoute) {
+                    routeTurnRestrictions.push(feature);
+                    console.log('Added turn restriction:', properties.name, 'at distance:', minDistance, 'meters');
+
+                    // Add marker to route turn restrictions layer
+                    const icon = createTurnRestrictionIcon();
+                    const popupContent = `
+                        <div>
+                            <div class="popup-title">${properties.name || 'Turn Restriction'}</div>
+                            <div class="popup-row">${properties.description || ''}</div>
+                        </div>
+                    `;
+
+                    const marker = L.marker(restrictionLatLng, { icon: icon })
+                        .addTo(routeTurnRestrictionsLayer)
+                        .bindPopup(popupContent);
+                    console.log('Marker added to routeTurnRestrictionsLayer for:', properties.name);
+                } else {
+                    console.log('Turn restriction not near route:', properties.name, 'min distance:', minDistance);
+                }
+            });
+
+            console.log('Total turn restrictions along route:', routeTurnRestrictions.length);
+            console.log('routeTurnRestrictionsLayer has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
+        }
+
+        function pointToLineDistance(point, lineStart, lineEnd) {
+            const A = point.lat - lineStart.lat;
+            const B = point.lng - lineStart.lng;
+            const C = lineEnd.lat - lineStart.lat;
+            const D = lineEnd.lng - lineStart.lng;
+
+            const dot = A * C + B * D;
+            const lenSq = C * C + D * D;
+
+            let param = -1;
+            if (lenSq !== 0) {
+                param = dot / lenSq;
+            }
+
+            let xx, yy;
+            if (param < 0) {
+                xx = lineStart.lat;
+                yy = lineStart.lng;
+            } else if (param > 1) {
+                xx = lineEnd.lat;
+                yy = lineEnd.lng;
+            } else {
+                xx = lineStart.lat + param * C;
+                yy = lineStart.lng + param * D;
+            }
+
+            const dx = point.lat - xx;
+            const dy = point.lng - yy;
+
+            // Convert to meters (approximate)
+            return Math.sqrt(dx * dx + dy * dy) * 111320; // 1 degree ≈ 111320 meters
+        }
+
+        function handlePositionUpdate(position) {
+            if (!navigationMode || !currentRoute) return;
+
+            const userLatLng = L.latLng(position.coords.latitude, position.coords.longitude);
+            const instructions = currentRoute.instructions;
+
+            // Find the next instruction based on current position
+            let nextInstruction = null;
+            let nextInstructionIndex = currentInstructionIndex;
+
+            for (let i = currentInstructionIndex; i < instructions.length; i++) {
+                const instruction = instructions[i];
+                const distanceToInstruction = userLatLng.distanceTo(instruction.latLng);
+
+                // If within 50 meters of the instruction point, consider it the next one
+                if (distanceToInstruction < 50) {
+                    nextInstruction = instruction;
+                    nextInstructionIndex = i;
+                    break;
+                }
+            }
+
+            // If we found a new instruction, update and notify
+            if (nextInstruction && nextInstructionIndex > currentInstructionIndex) {
+                currentInstructionIndex = nextInstructionIndex;
+                showNavigationNotification(nextInstruction.text);
+                speakInstruction(nextInstruction.text);
+            }
+
+            // Check for nearby turn restrictions
+            checkTurnRestrictionsProximity(userLatLng);
+
+            // Check if we've reached the destination
+            const destination = currentRoute.coordinates[currentRoute.coordinates.length - 1];
+            const distanceToDestination = userLatLng.distanceTo(L.latLng(destination[1], destination[0]));
+
+            if (distanceToDestination < 20) { // Within 20 meters of destination
+                showNavigationNotification('You have arrived at your destination.');
+                speakInstruction('You have arrived at your destination.');
+                stopNavigation();
+            }
+        }
+
+        function checkTurnRestrictionsProximity(userLatLng) {
+            // Only check turn restrictions along the current route
+            routeTurnRestrictions.forEach(feature => {
+                const { geometry, properties } = feature;
+                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) return;
+
+                const restrictionLatLng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
+                const distance = userLatLng.distanceTo(restrictionLatLng);
+
+                // If within 100 meters and not already warned
+                if (distance < 100 && !warnedTurnRestrictions.has(properties.name)) {
+                    const warningMessage = `Warning: Turn restriction ahead - ${properties.name || 'Unknown restriction'}`;
+                    showNavigationNotification(warningMessage);
+                    speakInstruction(`Warning: Turn restriction ahead. ${properties.description || ''}`);
+                    warnedTurnRestrictions.add(properties.name);
+                }
+            });
+        }
+
+        function showNavigationNotification(message) {
+            // Remove existing notification
+            if (navigationNotification) {
+                navigationNotification.remove();
+            }
+
+            // Create new notification
+            navigationNotification = document.createElement('div');
+            navigationNotification.className = 'navigation-notification';
+            navigationNotification.textContent = message;
+            document.body.appendChild(navigationNotification);
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                if (navigationNotification) {
+                    navigationNotification.classList.add('fade-out');
+                    setTimeout(() => {
+                        if (navigationNotification) {
+                            navigationNotification.remove();
+                            navigationNotification = null;
+                        }
+                    }, 300);
+                }
+            }, 5000);
+        }
+
+        function speakInstruction(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = currentLang === 'en_US' ? 'en-US' : (currentLang === 'zh_TW' ? 'zh-TW' : 'zh-CN');
+                utterance.rate = 0.8; // Slightly slower for clarity
+                utterance.pitch = 1;
+                utterance.volume = 0.8;
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // --- Custom Leaflet Icons ---
+        const createCarparkIcon = () => {
+            return L.divIcon({
+                className: 'carpark-icon',
+                html: 'P',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+        };
+
+        const createAttractionIcon = () => {
+            // Simple mountain SVG
+            const mountainSVG = `
+                <svg viewBox="0 0 20 20">
+                    <path fill="currentColor" d="M10 1.25l-7.5 15h15l-7.5-15zm-2.19 10l-1.81 3.62h7.79l-1.81-3.62-1.09 2.18-1.09-2.18z"/>
+                </svg>`;
+            return L.divIcon({
+                className: 'mountain-icon',
+                html: mountainSVG,
+                iconSize: [28, 28],
+                iconAnchor: [14, 28] // Anchor at the bottom center
+            });
+        };
+
+        const createViewingPointIcon = () => {
+            // Simple viewer/eye SVG
+            const viewerSVG = `
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 13c-3.31 0-6-2.69-6-6s2.69-6 6-6s6 2.69 6 6s-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4s-1.79-4-4-4z"/>
+                </svg>`;
+            return L.divIcon({
+                className: 'viewer-icon',
+                html: viewerSVG,
+                iconSize: [28, 28],
+                iconAnchor: [14, 28] // Anchor at the bottom center
+            });
+        };
+
+        const createParkingMeterIcon = () => {
+            // Simple car SVG
+            const carSVG = `
+                <svg viewBox="0 0 20 20">
+                    <path fill="currentColor" d="M18.9 6.2c-.4-.5-1-.8-1.7-.8H2.8c-.7 0-1.3.3-1.7.8c-.4.5-.6 1.1-.6 1.7v6.2c0 .6.2 1.2.6 1.7c.4.5 1 .8 1.7.8h.6c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h7.2c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h.6c.7 0 1.3-.3 1.7-.8c.4-.5.6-1.1.6-1.7V7.9c0-.6-.2-1.2-.6-1.7zM3.9 13.1c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zm12.2 0c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zM18 9H2V7.9c0-.1 0-.2.1-.3l.1-.1h15.6c.1 0 .2 0 .3.1l.1.3V9z"/>
+                </svg>`;
+            return L.divIcon({
+                className: 'parking-meter-icon',
+                html: carSVG,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+        };
+
+        const createTurnRestrictionIcon = () => {
+            return L.divIcon({
+                className: 'turn-restriction-icon',
+                html: '↺',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+        };
+
+        // --- Data Fetching: Car Parks ---
+        async function loadCarparkData() {
+            showLoading(true);
+            
+            if (markerLayer) {
+                markerLayer.clearLayers();
+            }
+            
+            const t = i18n[currentLang];
+            const langParam = `&lang=${currentLang}`;
+
+            try {
+                const infoUrl = API_INFO_BASE_URL + langParam;
+                const infoResponse = await fetch(infoUrl);
+                if (!infoResponse.ok) throw new Error('Failed to fetch car park info.');
+                const infoData = await infoResponse.json();
+                const infoList = infoData.results || [];
+
+                if (infoList.length === 0) {
+                    console.warn('No car park info found.');
+                    showLoading(false);
+                    return; 
+                }
+                
+                const parkIds = infoList.map(park => park.park_Id).join(',');
+                const vacancyUrl = `${API_VACANCY_BASE_URL}&carparkIds=${parkIds}${langParam}`;
+                const vacancyResponse = await fetch(vacancyUrl);
+                let vacancyList = [];
+                if (vacancyResponse.ok) {
+                    const vacancyData = await vacancyResponse.json();
+                    vacancyList = vacancyData.results || [];
+                } else {
+                    console.error('Failed to fetch car park vacancy data.');
+                }
+
+                const combinedData = processData(infoList, vacancyList);
+                plotCarparkMarkers(combinedData);
+
+            } catch (error) {
+                console.error('Error loading car park data:', error);
+                modalContent.innerHTML = `<p class="text-red-500">${t.errorBody}</p>`;
+                modalTitle.innerText = t.errorTitle;
+                infoModal.classList.remove('hidden');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function processData(infoList, vacancyList) {
+            const vacancyMap = new Map();
+            for (const vacancy of vacancyList) {
+                vacancyMap.set(vacancy.park_Id, vacancy);
+            }
+            return infoList.map(info => ({
+                ...info,
+                vacancyData: vacancyMap.get(info.park_Id) || null
+            }));
+        }
+
+        // --- Data Fetching: Attractions ---
+        async function loadAttractionsData() {
+            try {
+                const response = await fetch(API_ATTRACTIONS_URL);
+                if (!response.ok) throw new Error('Failed to fetch attractions data.');
+                const data = await response.json();
+                allAttractionsData = data.features || [];
+                plotAttractions();
+            } catch (error) {
+                console.error('Error loading attractions data:', error);
+                console.error(i18n[currentLang].attractionErrorBody);
+            }
+        }
+
+        // --- Data Fetching: Viewing Points ---
+        async function loadViewingPointsData() {
+            try {
+                const response = await fetch(API_VIEWING_POINTS_URL);
+                if (!response.ok) throw new Error('Failed to fetch viewing points data.');
+                const data = await response.json();
+                allViewingPointsData = data.features || [];
+                plotViewingPoints();
+            } catch (error) {
+                console.error('Error loading viewing points data:', error);
+                console.error(i18n[currentLang].viewingPointErrorBody);
+            }
+        }
+
+        // --- Data Fetching: Parking Meters (Dynamic) ---
+        function parseCSVToMap(csvText) {
+            const statusMap = new Map();
+            const rows = csvText.split('\n');
+            for (let i = 1; i < rows.length; i++) {
+                const columns = rows[i].split(',');
+                if (columns.length >= 3) {
+                    const parkingSpaceId = columns[0];
+                    const occupancyStatus = columns[2];
+                    if (parkingSpaceId && parkingSpaceId.trim() !== "") {
+                        statusMap.set(parkingSpaceId.trim(), occupancyStatus.trim());
+                    }
+                }
+            }
+            return statusMap;
+        }
+
+        // --- Data Fetching: Turn Restrictions (KMZ) ---
+        async function loadTurnRestrictionsData() {
+            try {
+                console.log('Starting to load turn restrictions data from:', API_TURN_RESTRICTIONS_URL);
+                const response = await fetch(API_TURN_RESTRICTIONS_URL);
+                console.log('KMZ fetch response status:', response.status);
+                if (!response.ok) throw new Error('Failed to fetch turn restrictions KMZ data.');
+
+                const kmzBlob = await response.blob();
+                console.log('KMZ blob size:', kmzBlob.size);
+                const zip = await JSZip.loadAsync(kmzBlob);
+                console.log('KMZ files:', Object.keys(zip.files));
+
+                // Find the KML file in the KMZ
+                const kmlFile = Object.keys(zip.files).find(fileName => fileName.endsWith('.kml'));
+                console.log('Found KML file:', kmlFile);
+                if (!kmlFile) throw new Error('No KML file found in KMZ.');
+
+                const kmlText = await zip.files[kmlFile].async('text');
+                console.log('KML text length:', kmlText.length);
+                allTurnRestrictionsData = parseKMLToGeoJSON(kmlText);
+                console.log('Turn restrictions data loaded:', allTurnRestrictionsData.features.length, 'features');
+
+            } catch (error) {
+                console.error('Error loading turn restrictions data:', error);
+            }
+        }
+
+        function parseKMLToGeoJSON(kmlText) {
+            const parser = new DOMParser();
+            const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+            const placemarks = kmlDoc.querySelectorAll('Placemark');
+            const features = [];
+
+            placemarks.forEach(placemark => {
+                const name = placemark.querySelector('name')?.textContent || '';
+                const description = placemark.querySelector('description')?.textContent || '';
+                const coordinates = placemark.querySelector('coordinates')?.textContent;
+
+                if (coordinates) {
+                    const coords = coordinates.trim().split(',').map(c => parseFloat(c));
+                    if (coords.length >= 2) {
+                        features.push({
+                            type: 'Feature',
+                            geometry: {
+                                type: 'Point',
+                                coordinates: [coords[0], coords[1]]
+                            },
+                            properties: {
+                                name: name,
+                                description: description
+                            }
+                        });
+                    }
+                }
+            });
+
+            return {
+                type: 'FeatureCollection',
+                features: features
+            };
+        }
+
+        async function loadParkingMetersData() {
+            if (!toggleParkingMeters.checked) return;
+
+            const t = i18n[currentLang];
+            try {
+                const bounds = map.getBounds();
+                const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
+                const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
+                const filter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
+                const maxFeatures = 500; 
+                const locationUrl = `${API_PARKING_METERS_BASE_URL}&maxFeatures=${maxFeatures}&filter=${encodeURIComponent(filter)}`;
+
+                const [locationResponse, statusResponse] = await Promise.all([
+                    fetch(locationUrl),
+                    fetch(API_PARKING_METERS_STATUS_URL)
+                ]);
+
+                if (!locationResponse.ok) throw new Error('Failed to fetch parking meter location data.');
+                if (!statusResponse.ok) throw new Error('Failed to fetch parking meter status data.');
+
+                const locationData = await locationResponse.json();
+                const statusText = await statusResponse.text();
+
+                allParkingMetersData = locationData.features || [];
+                parkingMeterStatusMap = parseCSVToMap(statusText);
+                
+                plotParkingMeters();
+
+            } catch (error) {
+                console.error('Error loading parking meters data:', error);
+                console.error(t.parkingMeterErrorBody);
+            }
+        }
+
+        // --- Data Decoding Helpers ---
+        function decodeVehicleType(code, t) {
+            if (!code) return t.unknown;
+            code = code.length > 1 ? code[code.length - 1] : code;
+            switch(code) {
+                case 'A': return t.vehicle_A;
+                case 'C': return t.vehicle_C;
+                case 'G': return t.vehicle_G;
+                case 'L': return t.vehicle_L || code;
+                case 'M': return t.vehicle_M || code;
+                default: return code;
+            }
+        }
+        
+        function decodeOperatingPeriod(code, t) {
+            if (!code) return t.unknown;
+            code = code.length > 1 ? code[code.length - 1] : code;
+             switch(code) {
+                case 'F': return t.op_F;
+                case 'N': return t.op_N;
+                case 'P': return t.op_P;
+                case 'D': return t.op_D;
+                case 'S': return t.op_S;
+                case 'H': return t.op_H;
+                case 'E': return t.op_E;
+                case 'Q': return t.op_Q;
+                case 'J': return t.op_J;
+                case 'A': return t.op_A;
+                case 'B': return t.op_B;
+                default: return code;
+            }
+        }
+
+        // --- Map Plotting: Car Parks ---
+        function plotCarparkMarkers(carparkList) {
+            markerLayer.clearLayers();
+            const icon = createCarparkIcon();
+            
+            carparkList.forEach(carpark => {
+                if (carpark.latitude && carpark.longitude) {
+                    const marker = L.marker([carpark.latitude, carpark.longitude], { icon: icon })
+                        .addTo(markerLayer);
+                        
+                    marker.on('click', () => {
+                        showCarparkInfo(carpark);
+                    });
+                }
+            });
+        }
+
+        // --- Map Plotting: Attractions ---
+        function plotAttractions() {
+            if (attractionsLayer) attractionsLayer.clearLayers();
+            if (!allAttractionsData) return;
+
+            const icon = createAttractionIcon();
+            const t = i18n[currentLang];
+            const nameKey = (currentLang === 'en_US') ? 'NAME_EN' : 'NAME_CH';
+            const locationKey = (currentLang === 'en_US') ? 'LOCATION_EN' : 'LOCATION_CH';
+
+            allAttractionsData.forEach(feature => {
+                const { coordinates } = feature.geometry;
+                const { properties } = feature;
+                
+                if (coordinates && coordinates.length === 2) {
+                    const latLng = [coordinates[1], coordinates[0]]; 
+                    const name = properties[nameKey] || t.notAvailable;
+                    const location = properties[locationKey] || t.notAvailable;
+                    const website = properties['WEBSITE'];
+
+                    const navigateHtml = `<button class="tooltip-navigate-btn" data-lat="${latLng[0]}" data-lon="${latLng[1]}">${t.navigate}</button>`;
+                    let websiteHtml = '';
+                    if (website && website.trim() !== '') {
+                        websiteHtml = `<br><a href="${website}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${t.website}</a>`;
+                    }
+
+                    const tooltipContent = `
+                        <div class="p-1">
+                            <strong class="text-base">${name}</strong>
+                            <br>
+                            <span class="text-sm">${location}</span>
+                            ${websiteHtml}
+                            <br>${navigateHtml}
+                        </div>
+                    `;
+
+                    const marker = L.marker(latLng, { icon: icon })
+                        .addTo(attractionsLayer);
+                        
+                    let closeTooltipTimer = null; 
+
+                    marker.bindTooltip(tooltipContent, { 
+                        permanent: false, 
+                        interactive: true 
+                    });
+
+                    const openTooltip = () => {
+                        if (closeTooltipTimer) {
+                            clearTimeout(closeTooltipTimer);
+                            closeTooltipTimer = null;
+                        }
+                        marker.openTooltip();
+                    };
+
+                    const startCloseTimer = () => {
+                        closeTooltipTimer = setTimeout(() => {
+                            marker.closeTooltip();
+                            closeTooltipTimer = null;
+                        }, 3000); 
+                    };
+
+                    marker.on('mouseover', openTooltip);
+                    marker.on('mouseout', startCloseTimer);
+
+                    marker.on('tooltipopen', function (e) {
+                        const tooltip = e.tooltip;
+                        if (tooltip) {
+                            tooltip.getElement().addEventListener('mouseover', openTooltip);
+                            tooltip.getElement().addEventListener('mouseout', startCloseTimer);
+                            
+                            // Add click listener for navigation button inside tooltip
+                            const btn = tooltip.getElement().querySelector('.tooltip-navigate-btn');
+                            if (btn && !btn.dataset.listenerAttached) {
+                                btn.addEventListener('click', () => {
+                                    handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
+                                });
+                                btn.dataset.listenerAttached = 'true';
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // --- Map Plotting: Viewing Points ---
+        function plotViewingPoints() {
+            if (viewingPointsLayer) viewingPointsLayer.clearLayers();
+            if (!allViewingPointsData) return;
+
+            const icon = createViewingPointIcon();
+            const t = i18n[currentLang];
+            const nameKey = (currentLang === 'en_US') ? 'Name_Eng' : 'Name_Chi';
+            const addressKey = (currentLang === 'en_US') ? 'Address_En' : 'Address_Chi';
+            const cpKey = (currentLang === 'en_US') ? 'CP_Eng' : 'CP_Chi';
+
+            allViewingPointsData.forEach(feature => {
+                const { coordinates } = feature.geometry;
+                const { properties } = feature;
+
+                if (coordinates && coordinates.length === 2) {
+                    const latLng = [coordinates[1], coordinates[0]]; 
+                    const name = properties[nameKey] || t.notAvailable;
+                    const countryPark = properties[cpKey] || t.notAvailable;
+                    const address = properties[addressKey] || t.notAvailable;
+
+                    const navigateHtml = `<button class="tooltip-navigate-btn" data-lat="${latLng[0]}" data-lon="${latLng[1]}">${t.navigate}</button>`;
+
+                    const tooltipContent = `
+                        <div class="p-1">
+                            <strong class="text-base">${name}</strong>
+                            <br>
+                            <span class="text-sm">${t.countryPark}: ${countryPark}</span>
+                            <br>
+                            <span class="text-sm">${t.address}: ${address}</span>
+                            <br>${navigateHtml}
+                        </div>
+                    `;
+
+                    const marker = L.marker(latLng, { icon: icon })
+                        .addTo(viewingPointsLayer);
+
+                    let closeTooltipTimer = null; 
+
+                    marker.bindTooltip(tooltipContent, {
+                        permanent: false, 
+                        interactive: true 
+                    });
+
+                    const openTooltip = () => {
+                        if (closeTooltipTimer) clearTimeout(closeTooltipTimer);
+                        closeTooltipTimer = null;
+                        marker.openTooltip();
+                    };
+
+                    const startCloseTimer = () => {
+                        closeTooltipTimer = setTimeout(() => {
+                            marker.closeTooltip();
+                            closeTooltipTimer = null;
+                        }, 3000);
+                    };
+
+                    marker.on('mouseover', openTooltip);
+                    marker.on('mouseout', startCloseTimer);
+
+                    marker.on('tooltipopen', function (e) {
+                        const tooltip = e.tooltip;
+                        if (tooltip) {
+                            tooltip.getElement().addEventListener('mouseover', openTooltip);
+                            tooltip.getElement().addEventListener('mouseout', startCloseTimer);
+
+                            // Add click listener for navigation button inside tooltip
+                            const btn = tooltip.getElement().querySelector('.tooltip-navigate-btn');
+                            if (btn && !btn.dataset.listenerAttached) {
+                                btn.addEventListener('click', () => {
+                                    handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
+                                });
+                                btn.dataset.listenerAttached = 'true';
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // --- Map Plotting: Parking Meters ---
+        function plotParkingMeters() {
+            if (parkingMetersLayer) parkingMetersLayer.clearLayers();
+            if (!allParkingMetersData || allParkingMetersData.length === 0) return;
+
+            const icon = createParkingMeterIcon();
+            const t = i18n[currentLang];
+
+            const groupedMeters = new Map();
+            const streetKey = (currentLang === 'en_US') ? 'Street' : (currentLang === 'zh_TW' ? 'Street_tc' : 'Street_sc');
+            const sectionKey = (currentLang === 'en_US') ? 'SectionOfStreet' : (currentLang === 'zh_TW' ? 'SectionOfStreet_tc' : 'SectionOfStreet_sc');
+
+            allParkingMetersData.forEach(feature => {
+                const { properties, geometry } = feature;
+                if (!geometry || !geometry.coordinates || geometry.coordinates.length !== 2) return;
+
+                const section = properties[sectionKey] || t.notAvailable;
+                const street = properties[streetKey] || t.notAvailable;
+                const groupingKey = `${street} | ${section}`;
+
+                if (!groupedMeters.has(groupingKey)) {
+                    const latLng = [geometry.coordinates[1], geometry.coordinates[0]];
+                    groupedMeters.set(groupingKey, {
+                        latLng: latLng,
+                        street: street,
+                        section: section,
+                        totalCount: 0,
+                        availableCount: 0,
+                        occupiedCount: 0,
+                        vehicleTypes: new Set(),
+                        opPeriods: new Set()
+                    });
+                }
+
+                const group = groupedMeters.get(groupingKey);
+                group.totalCount++;
+
+                const parkingSpaceId = properties.ParkingSpaceId;
+                const status = parkingMeterStatusMap.get(parkingSpaceId);
+
+                if (status === 'V') group.availableCount++;
+                else if (status === 'O') group.occupiedCount++;
+
+                if (properties.VehicleType) group.vehicleTypes.add(properties.VehicleType);
+                if (properties.OperatingPeriod) group.opPeriods.add(properties.OperatingPeriod);
+            });
+
+            groupedMeters.forEach(group => {
+                const vehicleTypesHtml = [...group.vehicleTypes]
+                    .map(code => `<span class="popup-list-item">&bull; ${decodeVehicleType(code, t)}</span>`)
+                    .join('');
+
+                const opPeriodsHtml = [...group.opPeriods]
+                    .map(code => `<span class="popup-list-item">&bull; ${decodeOperatingPeriod(code, t)}</span>`)
+                    .join('');
+
+                const navigateBtnHtml = `<button class="navigate-btn" data-lat="${group.latLng[0]}" data-lon="${group.latLng[1]}">${t.navigate}</button>`;
+
+                const popupContent = `
+                    <div>
+                        <div class="popup-title">${group.street}</div>
+                        <div class="popup-row"><span class="popup-label">${t.sectionOfStreet}:</span> ${group.section}</div>
+                        <hr class="my-2">
+                        <div class="popup-row"><span class="popup-label">${t.totalMeters}:</span> ${group.totalCount}</div>
+                        <div class="popup-row"><span class="popup-label">${t.availableMeters}:</span> <span class="font-bold text-green-600">${group.availableCount}</span></div>
+                        <div class="popup-row"><span class="popup-label">${t.occupiedMeters}:</span> <span class="font-bold text-red-600">${group.occupiedCount}</span></div>
+                        <hr class="my-2">
+                        <div class="popup-row"><span class="popup-label">${t.vehicleType}:</span> ${vehicleTypesHtml || t.notAvailable}</div>
+                        <div class="popup-row"><span class="popup-label">${t.operatingPeriod}:</span> ${opPeriodsHtml || t.notAvailable}</div>
+                        ${navigateBtnHtml}
+                    </div>
+                `;
+
+                L.marker(group.latLng, { icon: icon })
+                    .addTo(parkingMetersLayer)
+                    .bindPopup(popupContent);
+            });
+        }
+
+        // --- Map Plotting: Turn Restrictions ---
+        function plotTurnRestrictions() {
+            if (turnRestrictionsLayer) turnRestrictionsLayer.clearLayers();
+            if (!allTurnRestrictionsData || !allTurnRestrictionsData.features) return;
+
+            const icon = createTurnRestrictionIcon();
+
+            allTurnRestrictionsData.features.forEach(feature => {
+                const { geometry, properties } = feature;
+                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) return;
+
+                const latLng = [geometry.coordinates[1], geometry.coordinates[0]];
+                const name = properties.name || 'Turn Restriction';
+                const description = properties.description || '';
+
+                const popupContent = `
+                    <div>
+                        <div class="popup-title">${name}</div>
+                        <div class="popup-row">${description}</div>
+                    </div>
+                `;
+
+                L.marker(latLng, { icon: icon })
+                    .addTo(turnRestrictionsLayer)
+                    .bindPopup(popupContent);
+            });
+        }
+
+        // --- Show Information Modal (for Car Parks) ---
+        function showCarparkInfo(carpark) {
+            const t = i18n[currentLang];
+            modalTitle.innerText = carpark.name || t.modalTitle;
+            
+            const formatInfo = (label, value, unit = '') => {
+                const displayValue = (value !== null && value !== undefined && value !== "") ? `${value}${unit}` : t.notAvailable;
+                return `<div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
+                            <dt class="text-sm font-medium leading-6 text-gray-900">${label}</dt>
+                            <dd class="mt-1 text-sm leading-6 text-gray-700 sm:col-span-2 sm:mt-0">${displayValue}</dd>
+                        </div>`;
+            };
+
+            let vacancyHtml = '';
+            const vacancyData = carpark.vacancyData;
+            if (vacancyData) {
+                const vehicleTypeLabels = { privateCar: t.vac_car, motorCycle: t.vac_moto, LGV: t.vac_lgv, HGV: t.vac_hgv, coach: t.vac_coach };
+                let hasVacancyInfo = false;
+                for (const key in vehicleTypeLabels) {
+                    if (vacancyData[key] && Array.isArray(vacancyData[key]) && vacancyData[key].length > 0) {
+                        const vacancyInfo = vacancyData[key][0];
+                        let vacancyText = t.notAvailable;
+                        if (vacancyInfo && vacancyInfo.vacancy !== undefined) {
+                            vacancyText = typeof vacancyInfo.vacancy === 'number' ? vacancyInfo.vacancy : (vacancyInfo.vacancy || t.notAvailable);
+                        }
+                        vacancyHtml += formatInfo(vehicleTypeLabels[key], vacancyText);
+                        hasVacancyInfo = true;
+                    }
+                }
+                if (!hasVacancyInfo) vacancyHtml = formatInfo(t.vacancy, t.noVacancyData);
+            } else {
+                vacancyHtml = formatInfo(t.vacancy, t.notAvailable);
+            }
+            
+            let priceHtml = '';
+            const hourlyCharges = carpark.privateCar?.hourlyCharges;
+            if (hourlyCharges && Array.isArray(hourlyCharges) && hourlyCharges.length > 0) {
+                hourlyCharges.forEach(charge => {
+                    const priceText = charge.price !== undefined ? `$${charge.price} / hour` : t.notAvailable;
+                    const remarkText = (charge.remark && charge.remark.trim() !== "") ? charge.remark : t.notAvailable; 
+                    const weekdays = charge.weekdays?.join(', ') || 'All Days'; 
+                    const period = (charge.periodStart && charge.periodEnd) ? `${charge.periodStart} - ${charge.periodEnd}` : 'All Hours';
+                    priceHtml += `
+                        <div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
+                            <dt class="text-sm font-medium leading-6 text-gray-900">${t.price_car}</dt>
+                            <dd class="mt-1 text-sm leading-6 text-gray-700 sm:col-span-2 sm:mt-0">
+                                <p class="font-semibold">${priceText}</p>
+                                <p class="text-xs text-gray-500">${weekdays} (${period})</p>
+                                ${remarkText !== t.notAvailable ? `<p class="text-xs text-gray-500 mt-1">(${remarkText})</p>` : ''}
+                            </dd>
+                        </div>`;
+                });
+            } else {
+                priceHtml = formatInfo(t.price_car, t.notAvailable);
+            }
+
+            const heightLimit = carpark.heightLimits?.[0];
+            const heightText = heightLimit ? `${heightLimit.height} m` : t.notAvailable;
+            const remarkText = (heightLimit && heightLimit.remark && heightLimit.remark.trim() !== "") ? heightLimit.remark : t.notAvailable;
+            const statusText = carpark.opening_status || t.notAvailable;
+            const statusColor = (statusText === 'OPEN' || statusText === '開啟' || statusText === '开启') ? 'text-green-600' : 'text-red-600';
+            const navigateBtnHtml = `<button id="modal-navigate-btn" class="navigate-btn" data-lat="${carpark.latitude}" data-lon="${carpark.longitude}">${t.navigate}</button>`;
+
+            modalContent.innerHTML = `
+                <dl class="divide-y divide-gray-100">
+                    ${formatInfo(t.address, carpark.displayAddress)}
+                    ${formatInfo(t.parkId, carpark.park_Id)}
+                    <div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
+                        <dt class="text-sm font-medium leading-6 text-gray-900">${t.status}</dt>
+                        <dd class="mt-1 text-sm font-bold leading-6 ${statusColor} sm:col-span-2 sm:mt-0">${statusText}</dd>
+                    </div>
+                    ${vacancyHtml}
+                    ${priceHtml}
+                    ${formatInfo(t.heightLimit, heightText)}
+                    ${formatInfo(t.remarks, remarkText)}
+                </dl>
+                ${navigateBtnHtml}
+            `;
+            
+            const navBtn = document.getElementById('modal-navigate-btn');
+            if (navBtn) {
+                navBtn.addEventListener('click', () => {
+                    handleNavigationClick(navBtn.dataset.lat, navBtn.dataset.lon);
+                });
+            }
+
+            infoModal.classList.remove('hidden');
+        }
+
+        // --- Utility Functions ---
+        function showLoading(isLoading) {
+            if (isLoading) {
+                loadingSpinner.classList.remove('hidden');
+            } else {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // Debounced map move handler
+        function handleMapMove() {
+            clearTimeout(moveEndTimer);
+            moveEndTimer = setTimeout(() => {
+                loadParkingMetersData();
+            }, 500); // 500ms delay
+        }
+
+        // --- Initial Load ---
+        updateLangUI();
+        loadCarparkData();
+        
+        // Add listener for map movement
+        map.on('moveend', handleMapMove);
+
+        // Add popupopen listener for parking meter navigation buttons
+        map.on('popupopen', (e) => {
+            const popup = e.popup;
+            const btn = popup.getElement().querySelector('.navigate-btn');
+            if (btn) {
+                if (!btn.dataset.listenerAttached) {
+                    btn.addEventListener('click', () => {
+                        handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
+                    });
+                    btn.dataset.listenerAttached = 'true';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
