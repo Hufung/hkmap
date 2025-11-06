@@ -576,7 +576,12 @@
         // --- Leaflet & Map Setup ---
         
         // Center map on Hong Kong
-        const map = L.map('map').setView([22.3193, 114.1694], 12);
+        const map = L.map('map', {
+    center: [22.3193, 114.1694], // Hong Kong
+    zoom: 12,
+    crs: L.CRS.EPSG3857 // very important for HK map tiles
+});
+
         
         // Initialize marker layers
         markerLayer = L.layerGroup().addTo(map); // Car parks, on by default
@@ -593,6 +598,19 @@ L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/maptile/Default/{z}/{x}
     maxZoom: 18,
     tileSize: 256
 }).addTo(map);
+        // Add Hong Kong Government Map (GeoInfo Map Service)
+const hkGovMap = L.tileLayer(
+    "https://mapapi.geodata.gov.hk/gs/api/v1.0.0/maptile/Default/{z}/{x}/{y}.png",
+    {
+        attribution:
+            '&copy; <a href="https://geodata.gov.hk/">Hong Kong GeoData Store</a> © The Government of the HKSAR',
+        maxZoom: 18,
+        tileSize: 256,
+        zoomOffset: 0,
+        detectRetina: true
+    }
+).addTo(map);
+
 
         
         // --- API URLs ---
@@ -1957,4 +1975,5 @@ L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/maptile/Default/{z}/{x}
     </script>
 </body>
 </html>
+
 
