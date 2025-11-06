@@ -111,6 +111,24 @@
             fill: white;
         }
 
+        /* Custom Leaflet Icon Style for Roundabouts */
+        .roundabout-icon {
+            background-color: #ff6b6b; /* red-400 */
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            border: 2px solid #FFFFFF;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+
         /* Language Switcher Styles */
         .lang-btn.active {
             background-color: #007BFF;
@@ -354,6 +372,10 @@
             <input type="checkbox" id="toggle-parking-meters">
             <span id="label-parking-meters">Parking Meters</span>
         </label>
+        <label>
+            <input type="checkbox" id="toggle-roundabouts">
+            <span id="label-roundabouts">Roundabouts</span>
+        </label>
     </div>
 
     <!-- Map Container -->
@@ -387,9 +409,11 @@
         let attractionsLayer = null; // To store and clear attraction markers
         let viewingPointsLayer = null; // To store and clear viewing point markers
         let parkingMetersLayer = null; // To store and clear parking meter markers
+        let roundaboutsLayer = null; // To store and clear roundabout markers
         let allAttractionsData = null; // Cache for attractions data
         let allViewingPointsData = null; // Cache for viewing points data
         let allParkingMetersData = null; // Cache for parking meter location data
+        let allRoundaboutsData = null; // Cache for roundabout data
         let parkingMeterStatusMap = new Map(); // Cache for parking meter status
         let turnRestrictionsLayer = null; // To store turn restriction markers
         let allTurnRestrictionsData = null; // Cache for turn restrictions data
@@ -404,8 +428,10 @@
         let currentInstructionIndex = 0; // Current instruction being followed
         let navigationNotification = null; // Notification element for navigation
         let warnedTurnRestrictions = new Set(); // Track warned turn restrictions
+        let warnedRoundabouts = new Set(); // Track warned roundabouts
         let routeTurnRestrictionsLayer = null; // Layer for turn restrictions along current route
         let routeTurnRestrictions = []; // Turn restrictions along current route
+        let routeRoundabouts = []; // Roundabouts along current route
 
         // --- i18n Translation Object ---
         const i18n = {
@@ -431,9 +457,11 @@
                 toggleAttractions: 'Country Park Attractions',
                 toggleViewingPoints: 'Viewing Points',
                 toggleParkingMeters: 'Parking Meters',
+                toggleRoundabouts: 'Roundabouts',
                 attractionErrorBody: 'Could not load park attractions. Please try again later.',
                 viewingPointErrorBody: 'Could not load viewing points. Please try again later.',
                 parkingMeterErrorBody: 'Could not load parking meters for this area. Please try again later.',
+                roundaboutErrorBody: 'Could not load roundabout data. Please try again later.',
                 website: 'Website',
                 countryPark: 'Country Park',
                 street: 'Street',
@@ -461,7 +489,9 @@
                 op_J: '08:00 am - Midnight daily',
                 op_A: '08:00 am - Midnight on Mondays to Saturdays (except Sundays and public holidays)',
                 op_B: '08:00 am - 08:00 pm daily on Mondays to Saturdays (except Sundays and public holidays)',
-                unknown: 'Unknown'
+                unknown: 'Unknown',
+                roundaboutWarning: 'Roundabout ahead! Slow down and choose the correct lane.',
+                roundaboutApproaching: 'Approaching roundabout. Slow down.'
             },
             'zh_TW': {
                 modalTitle: '停車場詳情',
@@ -485,9 +515,11 @@
                 toggleAttractions: '郊野公園景點',
                 toggleViewingPoints: '觀景台',
                 toggleParkingMeters: '咪錶泊車位',
+                toggleRoundabouts: '迴旋處',
                 attractionErrorBody: '無法加載郊野公園景點，請稍後再試。',
                 viewingPointErrorBody: '無法加載觀景台資料，請稍後再試。',
                 parkingMeterErrorBody: '無法加載此區域的咪錶泊車位，請稍後再試。',
+                roundaboutErrorBody: '無法加載迴旋處資料，請稍後再試。',
                 website: '網站',
                 countryPark: '郊野公園',
                 street: '街道',
@@ -515,7 +547,9 @@
                 op_J: '每天上午8時至午夜',
                 op_A: '逢星期一至六上午8時至午夜 (星期日及公眾假期除外)',
                 op_B: '逢星期一至六上午8時至晚上8時 (星期日及公眾假期除外)',
-                unknown: '不詳'
+                unknown: '不詳',
+                roundaboutWarning: '前方有迴旋處！請減速並選擇正確的行車線。',
+                roundaboutApproaching: '接近迴旋處，請減速。'
             },
             'zh_CN': {
                 modalTitle: '停车场详情',
@@ -539,9 +573,11 @@
                 toggleAttractions: '郊野公园景点',
                 toggleViewingPoints: '观景台',
                 toggleParkingMeters: '咪表泊车位',
+                toggleRoundabouts: '回旋处',
                 attractionErrorBody: '无法加载郊野公园景点，请稍后再试。',
                 viewingPointErrorBody: '无法加载观景台资料，请稍后再试。',
                 parkingMeterErrorBody: '无法加载此区域的咪表泊车位，请稍后再试。',
+                roundaboutErrorBody: '无法加载回旋处资料，请稍后再试。',
                 website: '网站',
                 countryPark: '郊野公园',
                 street: '街道',
@@ -569,48 +605,36 @@
                 op_J: '每天上午8时至午夜',
                 op_A: '逢星期一至六上午8时至午夜 (星期日及公众假期除外)',
                 op_B: '逢星期一至六上午8时至晚上8时 (星期日及公众假期除外)',
-                unknown: '不详'
+                unknown: '不详',
+                roundaboutWarning: '前方有回旋处！请减速并选择正确的车道。',
+                roundaboutApproaching: '接近回旋处，请减速。'
             },
         };
 
         // --- Leaflet & Map Setup ---
         
         // Center map on Hong Kong
-        const map = L.map('map', {
-    center: [22.3193, 114.1694], // Hong Kong
-    zoom: 12,
-    crs: L.CRS.EPSG3857 // very important for HK map tiles
-});
-
+        const map = L.map('map').setView([22.3193, 114.1694], 12);
         
         // Initialize marker layers
         markerLayer = L.layerGroup().addTo(map); // Car parks, on by default
         attractionsLayer = L.layerGroup(); // Attractions, off by default
         viewingPointsLayer = L.layerGroup(); // Viewing Points, off by default
         parkingMetersLayer = L.layerGroup(); // Parking Meters, off by default
+        roundaboutsLayer = L.layerGroup(); // Roundabouts, off by default
         turnRestrictionsLayer = L.layerGroup(); // Turn restrictions, off by default
         routeTurnRestrictionsLayer = L.layerGroup(); // Route-specific turn restrictions, only visible during navigation
 
         // Add OpenStreetMap tile layer
-        // Add Hong Kong Government Map (GeoInfo Map) tile layer
-L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/maptile/Default/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://geodata.gov.hk/">Hong Kong GeoData Store</a> © The Government of the Hong Kong SAR',
-    maxZoom: 18,
-    tileSize: 256
-}).addTo(map);
-        // Add Hong Kong Government Map (GeoInfo Map Service)
-const hkGovMap = L.tileLayer(
-    "https://mapapi.geodata.gov.hk/gs/api/v1.0.0/maptile/Default/{z}/{x}/{y}.png",
-    {
-        attribution:
-            '&copy; <a href="https://geodata.gov.hk/">Hong Kong GeoData Store</a> © The Government of the HKSAR',
-        maxZoom: 18,
-        tileSize: 256,
-        zoomOffset: 0,
-        detectRetina: true
-    }
+        L.tileLayer(
+  'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/wgs84/{z}/{x}/{y}.png',
+  {
+    attribution:
+      '<a href="https://api.portal.hkmapservice.gov.hk/disclaimer" target="_blank">&copy; Map information from Lands Department</a> <img src="https://api.hkmapservice.gov.hk/mapapi/landsdlogo.jpg" style="height:20px;vertical-align:middle;">',
+    maxZoom: 20,
+    minZoom: 3
+  }
 ).addTo(map);
-
 
         
         // --- API URLs ---
@@ -621,6 +645,7 @@ const hkGovMap = L.tileLayer(
         const API_PARKING_METERS_BASE_URL = 'https://portal.csdi.gov.hk/server/services/common/td_rcd_1638930345315_81787/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=parkingspaces&outputFormat=geojson&srsName=EPSG:4326';
         const API_PARKING_METERS_STATUS_URL = 'https://resource.data.one.gov.hk/td/psiparkingspaces/occupancystatus/occupancystatus.csv';
         const API_TURN_RESTRICTIONS_URL = 'https://static.data.gov.hk/td/road-network-v2/TURN.kmz';
+        const API_ROUNDABOUTS_URL = 'https://static.data.gov.hk/td/road-network-v2/ROUNDABOUT.kmz';
 
         // --- DOM Elements ---
         const loadingSpinner = document.getElementById('loading-spinner');
@@ -634,14 +659,14 @@ const hkGovMap = L.tileLayer(
         const toggleAttractions = document.getElementById('toggle-attractions');
         const toggleViewingPoints = document.getElementById('toggle-viewing-points');
         const toggleParkingMeters = document.getElementById('toggle-parking-meters');
+        const toggleRoundabouts = document.getElementById('toggle-roundabouts');
         const labelCarparks = document.getElementById('label-carparks');
         const labelAttractions = document.getElementById('label-attractions');
         const labelViewingPoints = document.getElementById('label-viewing-points');
         const labelParkingMeters = document.getElementById('label-parking-meters');
+        const labelRoundabouts = document.getElementById('label-roundabouts');
         const locateBtn = document.getElementById('locate-btn');
 
-        // Turn restrictions are now only shown during navigation, no toggle needed
-        
         // --- Modal Controls ---
         closeModalBtn.addEventListener('click', () => {
             infoModal.classList.add('hidden');
@@ -669,6 +694,7 @@ const hkGovMap = L.tileLayer(
             labelAttractions.textContent = t.toggleAttractions;
             labelViewingPoints.textContent = t.toggleViewingPoints;
             labelParkingMeters.textContent = t.toggleParkingMeters;
+            labelRoundabouts.textContent = t.toggleRoundabouts;
         }
 
         langSwitcher.addEventListener('click', (e) => {
@@ -686,6 +712,7 @@ const hkGovMap = L.tileLayer(
             plotAttractions(); // Re-plot attractions with new language tooltips
             plotViewingPoints(); // Re-plot viewing points with new language tooltips
             plotParkingMeters(); // Re-plot parking meters with new language popups
+            plotRoundabouts(); // Re-plot roundabouts with new language popups
         });
 
         // --- Layer Toggle Controls ---
@@ -720,524 +747,969 @@ const hkGovMap = L.tileLayer(
                 map.removeLayer(viewingPointsLayer);
             }
         });
-        
+
         toggleParkingMeters.addEventListener('change', (e) => {
             if (e.target.checked) {
                 map.addLayer(parkingMetersLayer);
-                // Load data for the current view
-                loadParkingMetersData();
+                // Load data if it's not already cached
+                if (!allParkingMetersData) {
+                    loadParkingMetersData();
+                }
             } else {
                 map.removeLayer(parkingMetersLayer);
             }
         });
 
-
-        // --- Geolocation Controls ---
-        locateBtn.addEventListener('click', () => {
-            map.locate({ setView: true, maxZoom: 16, enableHighAccuracy: true });
-        });
-
-        map.on('locationfound', (e) => {
-            const t = i18n[currentLang];
-            // Clear previous location markers
-            if (userLocationMarker) {
-                map.removeLayer(userLocationMarker);
-            }
-            if (userLocationCircle) {
-                map.removeLayer(userLocationCircle);
-            }
-
-            // Add new markers
-            const radius = e.accuracy;
-            const popupText = t.userLocationPopup.replace('{accuracy}', radius.toFixed(0));
-            
-            userLocationMarker = L.marker(e.latlng).addTo(map)
-                .bindPopup(popupText).openPopup();
-            
-            userLocationCircle = L.circle(e.latlng, radius).addTo(map);
-
-            // Close popup after 4 seconds
-            setTimeout(() => {
-                if (userLocationMarker) {
-                    userLocationMarker.closePopup();
+        toggleRoundabouts.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                map.addLayer(roundaboutsLayer);
+                // Load data if it's not already cached
+                if (!allRoundaboutsData) {
+                    loadRoundaboutsData();
                 }
-            }, 4000);
-        });
-
-        map.on('locationerror', (e) => {
-            const t = i18n[currentLang];
-            console.error(t.geolocationError, e.message);
-            // We could show a modal, but for now, console error is non-intrusive
-        });
-
-        // --- Navigation Helper ---
-        function handleNavigationClick(destLat, destLon) {
-            const t = i18n[currentLang];
-            const destination = L.latLng(destLat, destLon);
-
-            // Close the car park information modal
-            infoModal.classList.add('hidden');
-
-            // Clear previous route
-            if (routingControl) {
-                map.removeControl(routingControl);
-                routingControl = null;
-            }
-
-            // Create a custom route panel
-            if (routePanel) {
-                routePanel.remove();
-                routePanel = null;
-            }
-
-            routePanel = L.DomUtil.create('div', 'custom-route-panel');
-            document.body.appendChild(routePanel);
-
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        // Got user location
-                        const origin = L.latLng(position.coords.latitude, position.coords.longitude);
-
-                        routingControl = L.Routing.control({
-                            waypoints: [
-                                origin,
-                                destination
-                            ],
-                            routeWhileDragging: false,
-                            showAlternatives: true, // Enable alternative routes
-                            altLineOptions: {
-                                styles: [
-                                    {color: 'black', opacity: 0.15, weight: 12},
-                                    {color: 'white', opacity: 0.8, weight: 8},
-                                    {color: 'blue', opacity: 0.8, weight: 4}
-                                ]
-                            },
-                            lineOptions: {
-                                styles: [
-                                    {color: 'black', opacity: 0.15, weight: 12},
-                                    {color: 'white', opacity: 0.8, weight: 8},
-                                    {color: 'blue', opacity: 0.8, weight: 4}
-                                ]
-                            },
-                            show: false, // Don't show default panel
-                            addWaypoints: false,
-                            draggableWaypoints: false,
-                            fitSelectedRoutes: true,
-                            createMarker: function(i, wp) {
-                                // Custom markers for start and end points
-                                if (i === 0) { // Start point (user location)
-                                    return L.marker(wp.latLng, {
-                                        icon: L.divIcon({
-                                            className: 'user-location-icon',
-                                            html: '<div style="background-color: #4CAF50; color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-weight: bold;">S</div>',
-                                            iconSize: [20, 20],
-                                            iconAnchor: [10, 10]
-                                        })
-                                    }).bindPopup(t.userLocationPopup.replace('{accuracy}', '0'));
-                                } else { // Destination
-                                    return L.marker(wp.latLng, {
-                                        icon: createCarparkIcon()
-                                    });
-                                }
-                            },
-                            router: L.Routing.osrmv1({
-                                serviceUrl: 'https://router.project-osrm.org/route/v1',
-                                profile: 'driving',
-                                language: currentLang === 'en_US' ? 'en' : (currentLang === 'zh_TW' ? 'zh-CN' : 'zh-CN') // Adjust language for routing instructions
-                            })
-                        }).addTo(map);
-
-                        // Custom handling for route found
-                        routingControl.on('routesfound', function(e) {
-                            const routes = e.routes;
-                            currentRoute = routes[0]; // Store the current route
-                            currentInstructionIndex = 0; // Reset instruction index
-                            const summary = routes[0].summary;
-
-                            // Enter navigation mode first
-                            navigationMode = true;
-                            console.log('Entered navigation mode');
-
-                            // Ensure turn restrictions data is loaded before filtering
-                            if (!allTurnRestrictionsData) {
-                                console.log('Loading turn restrictions data...');
-                                loadTurnRestrictionsData().then(() => {
-                                    console.log('Turn restrictions data loaded, filtering along route');
-                                    filterTurnRestrictionsAlongRoute(routes[0]);
-                                    console.log('Adding routeTurnRestrictionsLayer to map');
-                                    map.addLayer(routeTurnRestrictionsLayer);
-                                    console.log('routeTurnRestrictionsLayer added to map, has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
-                                });
-                            } else {
-                                console.log('Turn restrictions data already loaded, filtering along route');
-                                filterTurnRestrictionsAlongRoute(routes[0]);
-                                console.log('Adding routeTurnRestrictionsLayer to map');
-                                map.addLayer(routeTurnRestrictionsLayer);
-                                console.log('routeTurnRestrictionsLayer added to map, has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
-                            }
-
-                            startNavigation();
-
-                            // Display route information in our custom panel
-                            const distance = (summary.totalDistance / 1000).toFixed(2);
-                            const time = (summary.totalTime / 60).toFixed(1);
-
-                            // Create route options if alternatives exist
-                            let routeOptions = '';
-                            if (routes.length > 1) {
-                                routeOptions = '<div style="margin-bottom: 10px;"><strong>Select Route:</strong><select id="route-selector" style="margin-left: 10px; padding: 4px; border: 1px solid #ccc; border-radius: 4px;">';
-                                routes.forEach((route, index) => {
-                                    const routeDistance = (route.summary.totalDistance / 1000).toFixed(2);
-                                    const routeTime = (route.summary.totalTime / 60).toFixed(1);
-                                    routeOptions += `<option value="${index}">Route ${index + 1}: ${routeDistance} km, ${routeTime} min</option>`;
-                                });
-                                routeOptions += '</select></div>';
-                            }
-
-                            routePanel.innerHTML = `
-                                <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 350px;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                        <h3 style="margin: 0; font-size: 18px; font-weight: bold;">${t.navigate}</h3>
-                                        <button id="close-route-btn" style="background: none; border: none; font-size: 18px; cursor: pointer;">×</button>
-                                    </div>
-                                    ${routeOptions}
-                                    <div style="font-size: 14px; margin-bottom: 10px;">
-                                        <div><strong>Distance:</strong> ${distance} km</div>
-                                        <div><strong>Estimated Time:</strong> ${time} min</div>
-                                    </div>
-                                    <div style="max-height: 300px; overflow-y: auto;">
-                                        <ol style="padding-left: 20px; margin: 0;" id="route-instructions">
-                                            ${routes[0].instructions.map(instruction =>
-                                                `<li style="margin-bottom: 8px; font-size: 14px; line-height: 1.4;">${instruction.text}</li>`
-                                            ).join('')}
-                                        </ol>
-                                    </div>
-                                    <button id="stop-nav-btn" style="margin-top: 10px; padding: 10px 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%; font-size: 14px; font-weight: bold;">Stop Navigation</button>
-                                </div>
-                            `;
-
-                            // Add event listeners for close and stop buttons
-                            document.getElementById('close-route-btn').addEventListener('click', clearRoute);
-                            document.getElementById('stop-nav-btn').addEventListener('click', stopNavigation);
-
-                            // Add route selector functionality
-                            const routeSelector = document.getElementById('route-selector');
-                            if (routeSelector) {
-                                routeSelector.addEventListener('change', function() {
-                                    const selectedRouteIndex = parseInt(this.value);
-                                    const selectedRoute = routes[selectedRouteIndex];
-                                    currentRoute = selectedRoute; // Update current route
-                                    currentInstructionIndex = 0; // Reset
-                                    warnedTurnRestrictions.clear(); // Reset warnings
-
-                                    // Filter turn restrictions for new route
-                                    if (!allTurnRestrictionsData) {
-                                        loadTurnRestrictionsData().then(() => {
-                                            filterTurnRestrictionsAlongRoute(selectedRoute);
-                                        });
-                                    } else {
-                                        filterTurnRestrictionsAlongRoute(selectedRoute);
-                                    }
-
-                                    const selectedDistance = (selectedRoute.summary.totalDistance / 1000).toFixed(2);
-                                    const selectedTime = (selectedRoute.summary.totalTime / 60).toFixed(1);
-
-                                    // Update displayed distance and time
-                                    const distanceElement = routePanel.querySelector('div:nth-child(3) div:first-child');
-                                    const timeElement = routePanel.querySelector('div:nth-child(3) div:nth-child(2)');
-                                    distanceElement.innerHTML = `<strong>Distance:</strong> ${selectedDistance} km`;
-                                    timeElement.innerHTML = `<strong>Estimated Time:</strong> ${selectedTime} min`;
-
-                                    // Update instructions
-                                    const instructionsElement = document.getElementById('route-instructions');
-                                    instructionsElement.innerHTML = selectedRoute.instructions.map(instruction =>
-                                        `<li style="margin-bottom: 8px; font-size: 14px; line-height: 1.4;">${instruction.text}</li>`
-                                    ).join('');
-
-                                    // Highlight selected route on map
-                                    routingControl.route(selectedRouteIndex);
-                                });
-                            }
-                        });
-
-                        // Handle routing errors
-                        routingControl.on('routingerror', function(e) {
-                            console.error('Routing error:', e.error);
-                            routePanel.innerHTML = `
-                                <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
-                                    <h3 style="margin: 0 0 10px 0; font-size: 16px;">Routing Error</h3>
-                                    <p style="font-size: 14px; margin: 0;">Could not calculate route. Please try again.</p>
-                                    <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
-                                </div>
-                            `;
-                            document.getElementById('close-route-btn').addEventListener('click', clearRoute);
-                        });
-                    },
-                    (err) => {
-                        // Failed to get user location, show error
-                        console.error(t.geolocationError, err.message);
-                        routePanel.innerHTML = `
-                            <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
-                                <h3 style="margin: 0 0 10px 0; font-size: 16px;">Location Error</h3>
-                                <p style="font-size: 14px; margin: 0;">${t.geolocationError}</p>
-                                <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
-                            </div>
-                        `;
-                        document.getElementById('close-route-btn').addEventListener('click', clearRoute);
-                    }
-                );
             } else {
-                // Geolocation not supported
-                console.error(t.geolocationError, 'Geolocation is not supported by this browser.');
-                routePanel.innerHTML = `
-                    <div style="padding: 10px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-width: 300px;">
-                        <h3 style="margin: 0 0 10px 0; font-size: 16px;">Browser Error</h3>
-                        <p style="font-size: 14px; margin: 0;">Geolocation is not supported by your browser.</p>
-                        <button id="close-route-btn" style="margin-top: 10px; padding: 8px 12px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;">Close</button>
-                    </div>
-                `;
-                document.getElementById('close-route-btn').addEventListener('click', clearRoute);
+                map.removeLayer(roundaboutsLayer);
             }
-        }
+        });
 
-        function clearRoute() {
-            stopNavigation(); // Stop navigation if active
-            if (routingControl) {
-                map.removeControl(routingControl);
-                routingControl = null;
-            }
-            if (routePanel) {
-                routePanel.remove();
-                routePanel = null;
-            }
-        }
-
-        // --- Navigation Mode Functions ---
-        function startNavigation() {
-            if (!navigationMode || !currentRoute) return;
-
-            // Start watching position
-            if (navigator.geolocation) {
-                positionWatchId = navigator.geolocation.watchPosition(
-                    handlePositionUpdate,
-                    (error) => console.error('Position watch error:', error),
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 10000,
-                        maximumAge: 5000
-                    }
-                );
-            }
-        }
-
-        function stopNavigation() {
-            navigationMode = false;
-            currentRoute = null;
-            currentInstructionIndex = 0;
-            warnedTurnRestrictions.clear(); // Reset warned restrictions
-
-            // Clear route-specific turn restrictions and remove layer from map
-            if (routeTurnRestrictionsLayer) {
-                routeTurnRestrictionsLayer.clearLayers();
-                if (map.hasLayer(routeTurnRestrictionsLayer)) {
-                    map.removeLayer(routeTurnRestrictionsLayer);
-                }
-            }
-            routeTurnRestrictions = [];
-
-            // Clear navigation notification
-            if (navigationNotification) {
-                navigationNotification.remove();
-                navigationNotification = null;
-            }
-
-            // Stop watching position
-            if (positionWatchId !== null) {
-                navigator.geolocation.clearWatch(positionWatchId);
-                positionWatchId = null;
-            }
-        }
-
-        function filterTurnRestrictionsAlongRoute(route) {
-            console.log('Starting filterTurnRestrictionsAlongRoute');
-            if (!allTurnRestrictionsData || !allTurnRestrictionsData.features) {
-                console.log('No turn restrictions data available');
+        // --- Locate User Button ---
+        locateBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert(i18n[currentLang].geolocationError);
                 return;
             }
+            
+            loadingSpinner.classList.remove('hidden');
+            
+            navigator.geolocation.getCurrentPosition(
+                // Success callback
+                (position) => {
+                    loadingSpinner.classList.add('hidden');
+                    const { latitude, longitude, accuracy } = position.coords;
+                    
+                    // Remove existing user location marker if any
+                    if (userLocationMarker) {
+                        map.removeLayer(userLocationMarker);
+                    }
+                    if (userLocationCircle) {
+                        map.removeLayer(userLocationCircle);
+                    }
+                    
+                    // Create a marker for user's location
+                    userLocationMarker = L.marker([latitude, longitude], {
+                        icon: L.divIcon({
+                            className: 'user-location-icon',
+                            html: '📍',
+                            iconSize: [20, 20],
+                            iconAnchor: [10, 10]
+                        })
+                    }).addTo(map);
+                    
+                    // Create a circle to show accuracy
+                    userLocationCircle = L.circle([latitude, longitude], {
+                        radius: accuracy,
+                        color: '#4CAF50',
+                        fillColor: '#4CAF50',
+                        fillOpacity: 0.2,
+                        weight: 1
+                    }).addTo(map);
+                    
+                    // Add popup to user location
+                    userLocationMarker.bindPopup(
+                        i18n[currentLang].userLocationPopup.replace('{accuracy}', Math.round(accuracy))
+                    );
+                    
+                    // Center map on user's location
+                    map.setView([latitude, longitude], 15);
+                },
+                // Error callback
+                (error) => {
+                    loadingSpinner.classList.add('hidden');
+                    console.error('Geolocation error:', error);
+                    alert(i18n[currentLang].geolocationError);
+                },
+                // Options
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 60000
+                }
+            );
+        });
 
-            routeTurnRestrictionsLayer.clearLayers();
-            routeTurnRestrictions = [];
+        // --- Data Loading Functions ---
 
-            const routeCoordinates = route.coordinates;
-            const routeBuffer = 100; // meters buffer around route (increased for better coverage)
+        // Load Carpark Data
+        async function loadCarparkData() {
+            loadingSpinner.classList.remove('hidden');
+            markerLayer.clearLayers(); // Clear existing markers
 
-            console.log('Filtering turn restrictions for route with', routeCoordinates.length, 'coordinates');
-            console.log('Route coordinates sample:', routeCoordinates.slice(0, 5));
+            try {
+                // Fetch carpark info data
+                const infoResponse = await fetch(API_INFO_BASE_URL);
+                if (!infoResponse.ok) {
+                    throw new Error(`HTTP error! status: ${infoResponse.status}`);
+                }
+                const infoData = await infoResponse.json();
 
-            allTurnRestrictionsData.features.forEach((feature, index) => {
-                const { geometry, properties } = feature;
-                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) {
-                    console.log('Skipping feature', index, 'due to invalid geometry');
+                // Fetch carpark vacancy data
+                const vacancyResponse = await fetch(API_VACANCY_BASE_URL);
+                if (!vacancyResponse.ok) {
+                    throw new Error(`HTTP error! status: ${vacancyResponse.status}`);
+                }
+                const vacancyData = await vacancyResponse.json();
+
+                // Create a map of vacancy data by parkId for quick lookup
+                const vacancyMap = new Map();
+                vacancyData.results.forEach(park => {
+                    vacancyMap.set(park.park_Id, park);
+                });
+
+                // Plot carparks on the map
+                infoData.results.forEach(park => {
+                    const vacancy = vacancyMap.get(park.park_Id);
+                    plotCarparkMarker(park, vacancy);
+                });
+
+                loadingSpinner.classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading carpark data:', error);
+                loadingSpinner.classList.add('hidden');
+                showModal(i18n[currentLang].errorTitle, i18n[currentLang].errorBody);
+            }
+        }
+
+        // Load Attractions Data
+        async function loadAttractionsData() {
+            loadingSpinner.classList.remove('hidden');
+            attractionsLayer.clearLayers();
+
+            try {
+                // If we already have the data cached, use it
+                if (allAttractionsData) {
+                    plotAttractions();
+                    loadingSpinner.classList.add('hidden');
                     return;
                 }
 
-                const restrictionLatLng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
-                console.log('Processing turn restriction:', properties.name, 'at', restrictionLatLng);
+                const response = await fetch(API_ATTRACTIONS_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allAttractionsData = data;
 
-                // Check if turn restriction is near the route
-                let isNearRoute = false;
-                let minDistance = Infinity;
+                plotAttractions();
+                loadingSpinner.classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading attractions data:', error);
+                loadingSpinner.classList.add('hidden');
+                showModal(i18n[currentLang].errorTitle, i18n[currentLang].attractionErrorBody);
+            }
+        }
 
-                for (let i = 0; i < routeCoordinates.length - 1; i++) {
-                    const segmentStart = L.latLng(routeCoordinates[i][1], routeCoordinates[i][0]);
-                    const segmentEnd = L.latLng(routeCoordinates[i + 1][1], routeCoordinates[i + 1][0]);
+        // Load Viewing Points Data
+        async function loadViewingPointsData() {
+            loadingSpinner.classList.remove('hidden');
+            viewingPointsLayer.clearLayers();
 
-                    // Calculate distance from point to line segment
-                    const distance = pointToLineDistance(restrictionLatLng, segmentStart, segmentEnd);
-                    minDistance = Math.min(minDistance, distance);
+            try {
+                // If we already have the data cached, use it
+                if (allViewingPointsData) {
+                    plotViewingPoints();
+                    loadingSpinner.classList.add('hidden');
+                    return;
+                }
 
-                    if (distance <= routeBuffer) {
-                        isNearRoute = true;
-                        console.log('Turn restriction within buffer at segment', i, 'distance:', distance);
-                        break;
+                const response = await fetch(API_VIEWING_POINTS_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allViewingPointsData = data;
+
+                plotViewingPoints();
+                loadingSpinner.classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading viewing points data:', error);
+                loadingSpinner.classList.add('hidden');
+                showModal(i18n[currentLang].errorTitle, i18n[currentLang].viewingPointErrorBody);
+            }
+        }
+
+        // Load Parking Meters Data
+        async function loadParkingMetersData() {
+            loadingSpinner.classList.remove('hidden');
+            parkingMetersLayer.clearLayers();
+
+            try {
+                // If we already have the data cached, use it
+                if (allParkingMetersData) {
+                    plotParkingMeters();
+                    loadingSpinner.classList.add('hidden');
+                    return;
+                }
+
+                // Get current map bounds
+                const bounds = map.getBounds();
+                const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+                const url = `${API_PARKING_METERS_BASE_URL}&bbox=${bbox}`;
+
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allParkingMetersData = data;
+
+                // Also load parking meter status
+                await loadParkingMeterStatus();
+
+                plotParkingMeters();
+                loadingSpinner.classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading parking meters data:', error);
+                loadingSpinner.classList.add('hidden');
+                showModal(i18n[currentLang].errorTitle, i18n[currentLang].parkingMeterErrorBody);
+            }
+        }
+
+        // Load Parking Meter Status
+        async function loadParkingMeterStatus() {
+            try {
+                const response = await fetch(API_PARKING_METERS_STATUS_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const csvText = await response.text();
+                
+                // Parse CSV
+                const lines = csvText.split('\n');
+                const headers = lines[0].split(',');
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    const values = line.split(',');
+                    const status = {};
+                    
+                    headers.forEach((header, index) => {
+                        status[header] = values[index];
+                    });
+                    
+                    // Use spaceId as key
+                    if (status.spaceId) {
+                        parkingMeterStatusMap.set(status.spaceId, status);
                     }
                 }
+            } catch (error) {
+                console.error('Error loading parking meter status:', error);
+            }
+        }
 
-                if (isNearRoute) {
-                    routeTurnRestrictions.push(feature);
-                    console.log('Added turn restriction:', properties.name, 'at distance:', minDistance, 'meters');
+        // Load Roundabouts Data
+        async function loadRoundaboutsData() {
+            loadingSpinner.classList.remove('hidden');
+            roundaboutsLayer.clearLayers();
 
-                    // Add marker to route turn restrictions layer
-                    const icon = createTurnRestrictionIcon();
-                    const popupContent = `
-                        <div>
-                            <div class="popup-title">${properties.name || 'Turn Restriction'}</div>
-                            <div class="popup-row">${properties.description || ''}</div>
-                        </div>
+            try {
+                // If we already have the data cached, use it
+                if (allRoundaboutsData) {
+                    plotRoundabouts();
+                    loadingSpinner.classList.add('hidden');
+                    return;
+                }
+
+                // Fetch the KMZ file
+                const response = await fetch(API_ROUNDABOUTS_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const kmzBlob = await response.blob();
+                const kmzData = await readKMZFile(kmzBlob);
+                allRoundaboutsData = kmzData;
+
+                plotRoundabouts();
+                loadingSpinner.classList.add('hidden');
+            } catch (error) {
+                console.error('Error loading roundabouts data:', error);
+                loadingSpinner.classList.add('hidden');
+                showModal(i18n[currentLang].errorTitle, i18n[currentLang].roundaboutErrorBody);
+            }
+        }
+
+        // --- Data Plotting Functions ---
+
+        // Plot Carpark Markers
+        function plotCarparkMarker(park, vacancy) {
+            // Skip if no coordinates
+            if (!park.wgs84Lat || !park.wgs84Long) return;
+
+            // Create custom icon
+            const carparkIcon = L.divIcon({
+                className: 'carpark-icon',
+                html: 'P',
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
+
+            // Create marker
+            const marker = L.marker([parseFloat(park.wgs84Lat), parseFloat(park.wgs84Long)], {
+                icon: carparkIcon
+            }).addTo(markerLayer);
+
+            // Prepare popup content
+            const t = i18n[currentLang];
+            let popupContent = `
+                <div class="popup-title">${park.name || t.notAvailable}</div>
+                <div class="popup-row"><span class="popup-label">${t.address}:</span> ${park.address || t.notAvailable}</div>
+                <div class="popup-row"><span class="popup-label">${t.parkId}:</span> ${park.park_Id || t.notAvailable}</div>
+            `;
+
+            // Add vacancy information if available
+            if (vacancy) {
+                popupContent += `<div class="popup-row"><span class="popup-label">${t.status}:</span> ${vacancy.privateCar ? t.vacancy : t.noVacancyData}</div>`;
+                
+                if (vacancy.privateCar) {
+                    popupContent += `
+                        <div class="popup-row"><span class="popup-label">${t.vac_car}:</span> ${vacancy.privateCar.vacancy || 0}/${vacancy.privateCar.capacity || 0}</div>
                     `;
-
-                    const marker = L.marker(restrictionLatLng, { icon: icon })
-                        .addTo(routeTurnRestrictionsLayer)
-                        .bindPopup(popupContent);
-                    console.log('Marker added to routeTurnRestrictionsLayer for:', properties.name);
-                } else {
-                    console.log('Turn restriction not near route:', properties.name, 'min distance:', minDistance);
                 }
-            });
-
-            console.log('Total turn restrictions along route:', routeTurnRestrictions.length);
-            console.log('routeTurnRestrictionsLayer has', routeTurnRestrictionsLayer.getLayers().length, 'layers');
-        }
-
-        function pointToLineDistance(point, lineStart, lineEnd) {
-            const A = point.lat - lineStart.lat;
-            const B = point.lng - lineStart.lng;
-            const C = lineEnd.lat - lineStart.lat;
-            const D = lineEnd.lng - lineStart.lng;
-
-            const dot = A * C + B * D;
-            const lenSq = C * C + D * D;
-
-            let param = -1;
-            if (lenSq !== 0) {
-                param = dot / lenSq;
-            }
-
-            let xx, yy;
-            if (param < 0) {
-                xx = lineStart.lat;
-                yy = lineStart.lng;
-            } else if (param > 1) {
-                xx = lineEnd.lat;
-                yy = lineEnd.lng;
+                if (vacancy.motorCycle && vacancy.motorCycle.vacancy !== undefined) {
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.vac_moto}:</span> ${vacancy.motorCycle.vacancy || 0}/${vacancy.motorCycle.capacity || 0}</div>`;
+                }
+                if (vacancy.LGV && vacancy.LGV.vacancy !== undefined) {
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.vac_lgv}:</span> ${vacancy.LGV.vacancy || 0}/${vacancy.LGV.capacity || 0}</div>`;
+                }
+                if (vacancy.HGV && vacancy.HGV.vacancy !== undefined) {
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.vac_hgv}:</span> ${vacancy.HGV.vacancy || 0}/${vacancy.HGV.capacity || 0}</div>`;
+                }
+                if (vacancy.coach && vacancy.coach.vacancy !== undefined) {
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.vac_coach}:</span> ${vacancy.coach.vacancy || 0}/${vacancy.coach.capacity || 0}</div>`;
+                }
             } else {
-                xx = lineStart.lat + param * C;
-                yy = lineStart.lng + param * D;
+                popupContent += `<div class="popup-row"><span class="popup-label">${t.status}:</span> ${t.noVacancyData}</div>`;
             }
 
-            const dx = point.lat - xx;
-            const dy = point.lng - yy;
-
-            // Convert to meters (approximate)
-            return Math.sqrt(dx * dx + dy * dy) * 111320; // 1 degree ≈ 111320 meters
-        }
-
-        function handlePositionUpdate(position) {
-            if (!navigationMode || !currentRoute) return;
-
-            const userLatLng = L.latLng(position.coords.latitude, position.coords.longitude);
-            const instructions = currentRoute.instructions;
-
-            // Find the next instruction based on current position
-            let nextInstruction = null;
-            let nextInstructionIndex = currentInstructionIndex;
-
-            for (let i = currentInstructionIndex; i < instructions.length; i++) {
-                const instruction = instructions[i];
-                const distanceToInstruction = userLatLng.distanceTo(instruction.latLng);
-
-                // If within 50 meters of the instruction point, consider it the next one
-                if (distanceToInstruction < 50) {
-                    nextInstruction = instruction;
-                    nextInstructionIndex = i;
-                    break;
-                }
+            // Add hourly price if available
+            if (park.hourlyRate && park.hourlyRate.car) {
+                popupContent += `<div class="popup-row"><span class="popup-label">${t.price_car}:</span> $${park.hourlyRate.car}</div>`;
             }
 
-            // If we found a new instruction, update and notify
-            if (nextInstruction && nextInstructionIndex > currentInstructionIndex) {
-                currentInstructionIndex = nextInstructionIndex;
-                showNavigationNotification(nextInstruction.text);
-                speakInstruction(nextInstruction.text);
+            // Add height limit if available
+            if (park.heightLimit) {
+                popupContent += `<div class="popup-row"><span class="popup-label">${t.heightLimit}:</span> ${park.heightLimit}m</div>`;
             }
 
-            // Check for nearby turn restrictions
-            checkTurnRestrictionsProximity(userLatLng);
-
-            // Check if we've reached the destination
-            const destination = currentRoute.coordinates[currentRoute.coordinates.length - 1];
-            const distanceToDestination = userLatLng.distanceTo(L.latLng(destination[1], destination[0]));
-
-            if (distanceToDestination < 20) { // Within 20 meters of destination
-                showNavigationNotification('You have arrived at your destination.');
-                speakInstruction('You have arrived at your destination.');
-                stopNavigation();
+            // Add remarks if available
+            if (park.remarks) {
+                popupContent += `<div class="popup-row"><span class="popup-label">${t.remarks}:</span> ${park.remarks}</div>`;
             }
-        }
 
-        function checkTurnRestrictionsProximity(userLatLng) {
-            // Only check turn restrictions along the current route
-            routeTurnRestrictions.forEach(feature => {
-                const { geometry, properties } = feature;
-                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) return;
+            // Add navigation button
+            popupContent += `<button class="navigate-btn" data-lat="${park.wgs84Lat}" data-lng="${park.wgs84Long}">${t.navigate}</button>`;
 
-                const restrictionLatLng = L.latLng(geometry.coordinates[1], geometry.coordinates[0]);
-                const distance = userLatLng.distanceTo(restrictionLatLng);
+            // Bind popup to marker
+            marker.bindPopup(popupContent);
 
-                // If within 100 meters and not already warned
-                if (distance < 100 && !warnedTurnRestrictions.has(properties.name)) {
-                    const warningMessage = `Warning: Turn restriction ahead - ${properties.name || 'Unknown restriction'}`;
-                    showNavigationNotification(warningMessage);
-                    speakInstruction(`Warning: Turn restriction ahead. ${properties.description || ''}`);
-                    warnedTurnRestrictions.add(properties.name);
+            // Add click event for navigation
+            marker.on('popupopen', () => {
+                const navigateBtn = document.querySelector('.navigate-btn');
+                if (navigateBtn) {
+                    navigateBtn.addEventListener('click', (e) => {
+                        const lat = e.target.dataset.lat;
+                        const lng = e.target.dataset.lng;
+                        startNavigation([parseFloat(lat), parseFloat(lng)]);
+                    });
                 }
             });
         }
 
+        // Plot Attractions
+        function plotAttractions() {
+            if (!allAttractionsData) return;
+            
+            attractionsLayer.clearLayers();
+            
+            allAttractionsData.features.forEach(feature => {
+                const coordinates = feature.geometry.coordinates;
+                // GeoJSON uses [longitude, latitude] order
+                const lat = coordinates[1];
+                const lng = coordinates[0];
+                
+                // Create custom mountain icon
+                const attractionIcon = L.divIcon({
+                    className: 'mountain-icon',
+                    html: `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M12 3L2 21h20L12 3zm0 3l7 15H5l7-15z"/>
+                        </svg>
+                    `,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                
+                const marker = L.marker([lat, lng], {
+                    icon: attractionIcon
+                }).addTo(attractionsLayer);
+                
+                // Prepare tooltip content
+                const t = i18n[currentLang];
+                const props = feature.properties;
+                let tooltipContent = `<div class="font-bold">${props.name_eng || props.name_chi || t.notAvailable}</div>`;
+                
+                if (props.country_park) {
+                    tooltipContent += `<div>${t.countryPark}: ${props.country_park}</div>`;
+                }
+                
+                if (props.website) {
+                    tooltipContent += `<div><a href="${props.website}" target="_blank" class="text-blue-600 hover:underline">${t.website}</a></div>`;
+                }
+                
+                marker.bindTooltip(tooltipContent, {
+                    direction: 'top',
+                    offset: [0, -10],
+                    className: 'leaflet-tooltip-custom'
+                });
+            });
+        }
+
+        // Plot Viewing Points
+        function plotViewingPoints() {
+            if (!allViewingPointsData) return;
+            
+            viewingPointsLayer.clearLayers();
+            
+            allViewingPointsData.features.forEach(feature => {
+                const coordinates = feature.geometry.coordinates;
+                // GeoJSON uses [longitude, latitude] order
+                const lat = coordinates[1];
+                const lng = coordinates[0];
+                
+                // Create custom viewer icon
+                const viewingPointIcon = L.divIcon({
+                    className: 'viewer-icon',
+                    html: `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                        </svg>
+                    `,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                
+                const marker = L.marker([lat, lng], {
+                    icon: viewingPointIcon
+                }).addTo(viewingPointsLayer);
+                
+                // Prepare tooltip content
+                const t = i18n[currentLang];
+                const props = feature.properties;
+                let tooltipContent = `<div class="font-bold">${props.name_eng || props.name_chi || t.notAvailable}</div>`;
+                
+                if (props.country_park) {
+                    tooltipContent += `<div>${t.countryPark}: ${props.country_park}</div>`;
+                }
+                
+                marker.bindTooltip(tooltipContent, {
+                    direction: 'top',
+                    offset: [0, -10],
+                    className: 'leaflet-tooltip-custom'
+                });
+            });
+        }
+
+        // Plot Parking Meters
+        function plotParkingMeters() {
+            if (!allParkingMetersData) return;
+            
+            parkingMetersLayer.clearLayers();
+            
+            allParkingMetersData.features.forEach(feature => {
+                const coordinates = feature.geometry.coordinates;
+                // GeoJSON uses [longitude, latitude] order
+                const lat = coordinates[1];
+                const lng = coordinates[0];
+                
+                // Create custom parking meter icon
+                const parkingMeterIcon = L.divIcon({
+                    className: 'parking-meter-icon',
+                    html: `
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 18c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm0-3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3 3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm0-3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm3 3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm0-3c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z"/>
+                        </svg>
+                    `,
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                
+                const marker = L.marker([lat, lng], {
+                    icon: parkingMeterIcon
+                }).addTo(parkingMetersLayer);
+                
+                // Prepare popup content
+                const t = i18n[currentLang];
+                const props = feature.properties;
+                let popupContent = `
+                    <div class="popup-title">${t.parkingMeters}</div>
+                    <div class="popup-row"><span class="popup-label">${t.street}:</span> ${props.street || t.notAvailable}</div>
+                    <div class="popup-row"><span class="popup-label">${t.sectionOfStreet}:</span> ${props.section || t.notAvailable}</div>
+                `;
+                
+                // Vehicle type
+                if (props.vehicleType) {
+                    const vehicleTypeKey = `vehicle_${props.vehicleType}`;
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.vehicleType}:</span> ${t[vehicleTypeKey] || props.vehicleType || t.unknown}</div>`;
+                }
+                
+                // Operating period
+                if (props.operatingPeriod) {
+                    const opKey = `op_${props.operatingPeriod}`;
+                    popupContent += `<div class="popup-row"><span class="popup-label">${t.operatingPeriod}:</span> ${t[opKey] || props.operatingPeriod || t.unknown}</div>`;
+                }
+                
+                // Parking meter status
+                if (props.spaceId) {
+                    const status = parkingMeterStatusMap.get(props.spaceId);
+                    if (status) {
+                        popupContent += `
+                            <div class="popup-row"><span class="popup-label">${t.totalMeters}:</span> ${status.totalSpace || 0}</div>
+                            <div class="popup-row"><span class="popup-label">${t.availableMeters}:</span> ${status.availableSpace || 0}</div>
+                            <div class="popup-row"><span class="popup-label">${t.occupiedMeters}:</span> ${status.occupiedSpace || 0}</div>
+                        `;
+                    }
+                }
+                
+                // Add navigation button
+                popupContent += `<button class="navigate-btn" data-lat="${lat}" data-lng="${lng}">${t.navigate}</button>`;
+                
+                marker.bindPopup(popupContent);
+                
+                // Add click event for navigation
+                marker.on('popupopen', () => {
+                    const navigateBtn = document.querySelector('.navigate-btn');
+                    if (navigateBtn) {
+                        navigateBtn.addEventListener('click', (e) => {
+                            const lat = e.target.dataset.lat;
+                            const lng = e.target.dataset.lng;
+                            startNavigation([parseFloat(lat), parseFloat(lng)]);
+                        });
+                    }
+                });
+            });
+        }
+
+        // Plot Roundabouts
+        function plotRoundabouts() {
+            if (!allRoundaboutsData) return;
+            
+            roundaboutsLayer.clearLayers();
+            
+            allRoundaboutsData.features.forEach(feature => {
+                const coordinates = feature.geometry.coordinates;
+                // For point features, coordinates are [longitude, latitude]
+                const lat = coordinates[1];
+                const lng = coordinates[0];
+                
+                // Create custom roundabout icon
+                const roundaboutIcon = L.divIcon({
+                    className: 'roundabout-icon',
+                    html: '↻',
+                    iconSize: [28, 28],
+                    iconAnchor: [14, 14]
+                });
+                
+                const marker = L.marker([lat, lng], {
+                    icon: roundaboutIcon
+                }).addTo(roundaboutsLayer);
+                
+                // Prepare popup content
+                const t = i18n[currentLang];
+                const props = feature.properties;
+                
+                let popupContent = `
+                    <div class="popup-title">${t.toggleRoundabouts}</div>
+                    <div class="popup-row"><strong>${t.roundaboutWarning}</strong></div>
+                `;
+                
+                // Add any additional properties from the roundabout data
+                if (props && Object.keys(props).length > 0) {
+                    popupContent += '<div class="popup-row"><em>Additional information:</em></div>';
+                    for (const [key, value] of Object.entries(props)) {
+                        if (value) {
+                            popupContent += `<div class="popup-row"><span class="popup-label">${key}:</span> ${value}</div>`;
+                        }
+                    }
+                }
+                
+                marker.bindPopup(popupContent);
+            });
+        }
+
+        // --- KMZ File Processing ---
+        async function readKMZFile(kmzBlob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    try {
+                        const zip = new JSZip();
+                        const contents = await zip.loadAsync(e.target.result);
+                        
+                        // Find the KML file in the KMZ
+                        let kmlFile = null;
+                        for (const filename in contents.files) {
+                            if (filename.endsWith('.kml')) {
+                                kmlFile = contents.files[filename];
+                                break;
+                            }
+                        }
+                        
+                        if (!kmlFile) {
+                            reject(new Error('No KML file found in KMZ'));
+                            return;
+                        }
+                        
+                        // Read the KML content
+                        const kmlText = await kmlFile.async('text');
+                        
+                        // Parse KML to GeoJSON (simplified)
+                        const parser = new DOMParser();
+                        const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
+                        
+                        const features = [];
+                        const placemarks = kmlDoc.getElementsByTagName('Placemark');
+                        
+                        for (const placemark of placemarks) {
+                            const nameElement = placemark.getElementsByTagName('name')[0];
+                            const name = nameElement ? nameElement.textContent : 'Unnamed';
+                            
+                            const pointElement = placemark.getElementsByTagName('Point')[0];
+                            if (pointElement) {
+                                const coordinatesElement = pointElement.getElementsByTagName('coordinates')[0];
+                                if (coordinatesElement) {
+                                    const [lng, lat, alt] = coordinatesElement.textContent.split(',').map(Number);
+                                    
+                                    // Extract properties
+                                    const properties = { name };
+                                    
+                                    // Add any ExtendedData
+                                    const extendedData = placemark.getElementsByTagName('ExtendedData')[0];
+                                    if (extendedData) {
+                                        const dataElements = extendedData.getElementsByTagName('Data');
+                                        for (const dataEl of dataElements) {
+                                            const key = dataEl.getAttribute('name');
+                                            const valueEl = dataEl.getElementsByTagName('value')[0];
+                                            if (key && valueEl) {
+                                                properties[key] = valueEl.textContent;
+                                            }
+                                        }
+                                    }
+                                    
+                                    features.push({
+                                        type: 'Feature',
+                                        geometry: {
+                                            type: 'Point',
+                                            coordinates: [lng, lat]
+                                        },
+                                        properties: properties
+                                    });
+                                }
+                            }
+                        }
+                        
+                        resolve({
+                            type: 'FeatureCollection',
+                            features: features
+                        });
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(kmzBlob);
+            });
+        }
+
+        // --- Navigation Functions ---
+
+        // Start navigation to destination
+        function startNavigation(destination) {
+            // Check if we have user location
+            if (!userLocationMarker) {
+                alert('Please enable location services first by clicking the locate button.');
+                return;
+            }
+            
+            const userLatLng = userLocationMarker.getLatLng();
+            
+            // Remove existing routing control if any
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+            
+            // Remove existing route panel if any
+            if (routePanel) {
+                routePanel.remove();
+            }
+            
+            // Create routing control
+            routingControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(userLatLng.lat, userLatLng.lng),
+                    L.latLng(destination[0], destination[1])
+                ],
+                routeWhileDragging: false,
+                showAlternatives: false,
+                lineOptions: {
+                    styles: [{ color: '#007BFF', weight: 5 }]
+                },
+                createMarker: function() { return null; }, // Don't create default markers
+                addWaypoints: false, // Disable adding waypoints
+                draggableWaypoints: false // Disable dragging waypoints
+            }).addTo(map);
+            
+            // Create custom route panel
+            routePanel = L.DomUtil.create('div', 'custom-route-panel');
+            document.body.appendChild(routePanel);
+            
+            // Listen for route found event
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                if (routes && routes.length > 0) {
+                    currentRoute = routes[0];
+                    currentInstructionIndex = 0;
+                    
+                    // Display route instructions
+                    displayRouteInstructions(currentRoute);
+                    
+                    // Extract turn restrictions and roundabouts along the route
+                    extractRouteHazards(currentRoute);
+                    
+                    // Start navigation mode
+                    navigationMode = true;
+                    
+                    // Start watching user position
+                    startWatchingPosition();
+                    
+                    // Show initial navigation notification
+                    showNavigationNotification('Navigation started. Follow the route instructions.');
+                }
+            });
+            
+            // Close any open popups
+            map.closePopup();
+        }
+
+        // Display route instructions
+        function displayRouteInstructions(route) {
+            if (!routePanel) return;
+            
+            const t = i18n[currentLang];
+            let html = '<div class="font-bold text-lg mb-2">Route Instructions</div>';
+            html += `<div class="text-sm mb-2">Total distance: ${(route.summary.totalDistance / 1000).toFixed(1)} km</div>`;
+            html += `<div class="text-sm mb-4">Estimated time: ${Math.round(route.summary.totalTime / 60)} minutes</div>`;
+            
+            html += '<div class="max-h-60 overflow-y-auto">';
+            route.instructions.forEach((instruction, index) => {
+                const activeClass = index === 0 ? 'bg-blue-100' : '';
+                html += `
+                    <div class="p-2 border-b ${activeClass}">
+                        <div class="font-medium">${instruction.text}</div>
+                        <div class="text-xs text-gray-600">${(instruction.distance / 1000).toFixed(1)} km</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            // Add stop navigation button
+            html += `<button id="stop-navigation" class="mt-4 w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded">Stop Navigation</button>`;
+            
+            routePanel.innerHTML = html;
+            
+            // Add event listener for stop navigation button
+            document.getElementById('stop-navigation').addEventListener('click', stopNavigation);
+        }
+
+        // Extract turn restrictions and roundabouts along the route
+        function extractRouteHazards(route) {
+            routeTurnRestrictions = [];
+            routeRoundabouts = [];
+            warnedTurnRestrictions.clear();
+            warnedRoundabouts.clear();
+            
+            // Clear previous route turn restrictions
+            routeTurnRestrictionsLayer.clearLayers();
+            
+            // For each coordinate in the route, check if it's near a turn restriction or roundabout
+            route.coordinates.forEach(coord => {
+                const latLng = L.latLng(coord.lat, coord.lng);
+                
+                // Check for nearby roundabouts
+                if (allRoundaboutsData) {
+                    allRoundaboutsData.features.forEach(roundabout => {
+                        const roundaboutLatLng = L.latLng(
+                            roundabout.geometry.coordinates[1],
+                            roundabout.geometry.coordinates[0]
+                        );
+                        
+                        const distance = latLng.distanceTo(roundaboutLatLng);
+                        
+                        // If within 200 meters of a roundabout, add to route hazards
+                        if (distance < 200) {
+                            const existing = routeRoundabouts.find(r => 
+                                r.geometry.coordinates[0] === roundabout.geometry.coordinates[0] &&
+                                r.geometry.coordinates[1] === roundabout.geometry.coordinates[1]
+                            );
+                            
+                            if (!existing) {
+                                routeRoundabouts.push(roundabout);
+                                
+                                // Add marker for this roundabout on the route
+                                const marker = L.marker([roundabout.geometry.coordinates[1], roundabout.geometry.coordinates[0]], {
+                                    icon: L.divIcon({
+                                        className: 'roundabout-icon',
+                                        html: '↻',
+                                        iconSize: [24, 24],
+                                        iconAnchor: [12, 12]
+                                    })
+                                }).addTo(routeTurnRestrictionsLayer);
+                                
+                                marker.bindPopup(i18n[currentLang].roundaboutWarning);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // Start watching user position during navigation
+        function startWatchingPosition() {
+            if (!navigator.geolocation) return;
+            
+            positionWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude, accuracy } = position.coords;
+                    
+                    // Update user location marker
+                    if (userLocationMarker) {
+                        userLocationMarker.setLatLng([latitude, longitude]);
+                    }
+                    if (userLocationCircle) {
+                        userLocationCircle.setLatLng([latitude, longitude]);
+                        userLocationCircle.setRadius(accuracy);
+                    }
+                    
+                    // Check if we're approaching any hazards
+                    checkApproachingHazards([latitude, longitude]);
+                    
+                    // Update current instruction based on position
+                    updateCurrentInstruction([latitude, longitude]);
+                },
+                (error) => {
+                    console.error('Error watching position:', error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 3000
+                }
+            );
+        }
+
+        // Check if user is approaching any hazards (roundabouts)
+        function checkApproachingHazards(userPosition) {
+            const userLatLng = L.latLng(userPosition[0], userPosition[1]);
+            const t = i18n[currentLang];
+            
+            // Check roundabouts
+            routeRoundabouts.forEach(roundabout => {
+                const roundaboutId = `${roundabout.geometry.coordinates[0]},${roundabout.geometry.coordinates[1]}`;
+                
+                if (!warnedRoundabouts.has(roundaboutId)) {
+                    const roundaboutLatLng = L.latLng(
+                        roundabout.geometry.coordinates[1],
+                        roundabout.geometry.coordinates[0]
+                    );
+                    
+                    const distance = userLatLng.distanceTo(roundaboutLatLng);
+                    
+                    // Warn if within 150 meters of a roundabout
+                    if (distance < 150) {
+                        showNavigationNotification(t.roundaboutApproaching);
+                        warnedRoundabouts.add(roundaboutId);
+                    }
+                }
+            });
+        }
+
+        // Update current instruction based on user position
+        function updateCurrentInstruction(userPosition) {
+            if (!currentRoute) return;
+            
+            const userLatLng = L.latLng(userPosition[0], userPosition[1]);
+            let closestInstructionIndex = 0;
+            let minDistance = Infinity;
+            
+            // Find the closest instruction to the user
+            currentRoute.instructions.forEach((instruction, index) => {
+                // Calculate distance to this instruction point
+                const instructionLatLng = L.latLng(instruction.coordinate.lat, instruction.coordinate.lng);
+                const distance = userLatLng.distanceTo(instructionLatLng);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestInstructionIndex = index;
+                }
+            });
+            
+            // Update current instruction if it's different
+            if (closestInstructionIndex !== currentInstructionIndex) {
+                currentInstructionIndex = closestInstructionIndex;
+                
+                // Highlight the current instruction in the panel
+                const instructionElements = routePanel.querySelectorAll('.p-2');
+                instructionElements.forEach((el, index) => {
+                    if (index === currentInstructionIndex) {
+                        el.classList.add('bg-blue-100');
+                    } else {
+                        el.classList.remove('bg-blue-100');
+                    }
+                });
+                
+                // Show notification for the current instruction if it's significant
+                if (currentInstructionIndex < currentRoute.instructions.length) {
+                    const currentInstruction = currentRoute.instructions[currentInstructionIndex];
+                    
+                    // Only show notifications for important maneuvers
+                    if (currentInstruction.type.includes('Left') || 
+                        currentInstruction.type.includes('Right') ||
+                        currentInstruction.type.includes('Roundabout') ||
+                        currentInstruction.type.includes('Start') ||
+                        currentInstruction.type.includes('Destination')) {
+                        
+                        showNavigationNotification(currentInstruction.text);
+                    }
+                }
+            }
+        }
+
+        // Show navigation notification
         function showNavigationNotification(message) {
-            // Remove existing notification
+            // Remove existing notification if any
             if (navigationNotification) {
                 navigationNotification.remove();
             }
-
+            
             // Create new notification
             navigationNotification = document.createElement('div');
             navigationNotification.className = 'navigation-notification';
             navigationNotification.textContent = message;
+            
             document.body.appendChild(navigationNotification);
-
-            // Auto-hide after 5 seconds
+            
+            // Auto-remove after 5 seconds
             setTimeout(() => {
                 if (navigationNotification) {
                     navigationNotification.classList.add('fade-out');
@@ -1251,729 +1723,79 @@ const hkGovMap = L.tileLayer(
             }, 5000);
         }
 
-        function speakInstruction(text) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = currentLang === 'en_US' ? 'en-US' : (currentLang === 'zh_TW' ? 'zh-TW' : 'zh-CN');
-                utterance.rate = 0.8; // Slightly slower for clarity
-                utterance.pitch = 1;
-                utterance.volume = 0.8;
-
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
-        // --- Custom Leaflet Icons ---
-        const createCarparkIcon = () => {
-            return L.divIcon({
-                className: 'carpark-icon',
-                html: 'P',
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            });
-        };
-
-        const createAttractionIcon = () => {
-            // Simple mountain SVG
-            const mountainSVG = `
-                <svg viewBox="0 0 20 20">
-                    <path fill="currentColor" d="M10 1.25l-7.5 15h15l-7.5-15zm-2.19 10l-1.81 3.62h7.79l-1.81-3.62-1.09 2.18-1.09-2.18z"/>
-                </svg>`;
-            return L.divIcon({
-                className: 'mountain-icon',
-                html: mountainSVG,
-                iconSize: [28, 28],
-                iconAnchor: [14, 28] // Anchor at the bottom center
-            });
-        };
-
-        const createViewingPointIcon = () => {
-            // Simple viewer/eye SVG
-            const viewerSVG = `
-                <svg viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 13c-3.31 0-6-2.69-6-6s2.69-6 6-6s6 2.69 6 6s-2.69 6-6 6zm0-10c-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4s-1.79-4-4-4z"/>
-                </svg>`;
-            return L.divIcon({
-                className: 'viewer-icon',
-                html: viewerSVG,
-                iconSize: [28, 28],
-                iconAnchor: [14, 28] // Anchor at the bottom center
-            });
-        };
-
-        const createParkingMeterIcon = () => {
-            // Simple car SVG
-            const carSVG = `
-                <svg viewBox="0 0 20 20">
-                    <path fill="currentColor" d="M18.9 6.2c-.4-.5-1-.8-1.7-.8H2.8c-.7 0-1.3.3-1.7.8c-.4.5-.6 1.1-.6 1.7v6.2c0 .6.2 1.2.6 1.7c.4.5 1 .8 1.7.8h.6c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h7.2c.4 0 .7.3.7.7v.7c0 .4.3.7.7.7h1.4c.4 0 .7-.3.7-.7v-.7c0-.4.3-.7.7-.7h.6c.7 0 1.3-.3 1.7-.8c.4-.5.6-1.1.6-1.7V7.9c0-.6-.2-1.2-.6-1.7zM3.9 13.1c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zm12.2 0c-.8 0-1.4-.6-1.4-1.4s.6-1.4 1.4-1.4s1.4.6 1.4 1.4s-.6 1.4-1.4 1.4zM18 9H2V7.9c0-.1 0-.2.1-.3l.1-.1h15.6c.1 0 .2 0 .3.1l.1.3V9z"/>
-                </svg>`;
-            return L.divIcon({
-                className: 'parking-meter-icon',
-                html: carSVG,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            });
-        };
-
-        const createTurnRestrictionIcon = () => {
-            return L.divIcon({
-                className: 'turn-restriction-icon',
-                html: '↺',
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-        };
-
-        // --- Data Fetching: Car Parks ---
-        async function loadCarparkData() {
-            showLoading(true);
+        // Stop navigation
+        function stopNavigation() {
+            navigationMode = false;
             
-            if (markerLayer) {
-                markerLayer.clearLayers();
+            // Stop watching position
+            if (positionWatchId) {
+                navigator.geolocation.clearWatch(positionWatchId);
+                positionWatchId = null;
             }
             
-            const t = i18n[currentLang];
-            const langParam = `&lang=${currentLang}`;
-
-            try {
-                const infoUrl = API_INFO_BASE_URL + langParam;
-                const infoResponse = await fetch(infoUrl);
-                if (!infoResponse.ok) throw new Error('Failed to fetch car park info.');
-                const infoData = await infoResponse.json();
-                const infoList = infoData.results || [];
-
-                if (infoList.length === 0) {
-                    console.warn('No car park info found.');
-                    showLoading(false);
-                    return; 
-                }
-                
-                const parkIds = infoList.map(park => park.park_Id).join(',');
-                const vacancyUrl = `${API_VACANCY_BASE_URL}&carparkIds=${parkIds}${langParam}`;
-                const vacancyResponse = await fetch(vacancyUrl);
-                let vacancyList = [];
-                if (vacancyResponse.ok) {
-                    const vacancyData = await vacancyResponse.json();
-                    vacancyList = vacancyData.results || [];
-                } else {
-                    console.error('Failed to fetch car park vacancy data.');
-                }
-
-                const combinedData = processData(infoList, vacancyList);
-                plotCarparkMarkers(combinedData);
-
-            } catch (error) {
-                console.error('Error loading car park data:', error);
-                modalContent.innerHTML = `<p class="text-red-500">${t.errorBody}</p>`;
-                modalTitle.innerText = t.errorTitle;
-                infoModal.classList.remove('hidden');
-            } finally {
-                showLoading(false);
-            }
-        }
-
-        function processData(infoList, vacancyList) {
-            const vacancyMap = new Map();
-            for (const vacancy of vacancyList) {
-                vacancyMap.set(vacancy.park_Id, vacancy);
-            }
-            return infoList.map(info => ({
-                ...info,
-                vacancyData: vacancyMap.get(info.park_Id) || null
-            }));
-        }
-
-        // --- Data Fetching: Attractions ---
-        async function loadAttractionsData() {
-            try {
-                const response = await fetch(API_ATTRACTIONS_URL);
-                if (!response.ok) throw new Error('Failed to fetch attractions data.');
-                const data = await response.json();
-                allAttractionsData = data.features || [];
-                plotAttractions();
-            } catch (error) {
-                console.error('Error loading attractions data:', error);
-                console.error(i18n[currentLang].attractionErrorBody);
-            }
-        }
-
-        // --- Data Fetching: Viewing Points ---
-        async function loadViewingPointsData() {
-            try {
-                const response = await fetch(API_VIEWING_POINTS_URL);
-                if (!response.ok) throw new Error('Failed to fetch viewing points data.');
-                const data = await response.json();
-                allViewingPointsData = data.features || [];
-                plotViewingPoints();
-            } catch (error) {
-                console.error('Error loading viewing points data:', error);
-                console.error(i18n[currentLang].viewingPointErrorBody);
-            }
-        }
-
-        // --- Data Fetching: Parking Meters (Dynamic) ---
-        function parseCSVToMap(csvText) {
-            const statusMap = new Map();
-            const rows = csvText.split('\n');
-            for (let i = 1; i < rows.length; i++) {
-                const columns = rows[i].split(',');
-                if (columns.length >= 3) {
-                    const parkingSpaceId = columns[0];
-                    const occupancyStatus = columns[2];
-                    if (parkingSpaceId && parkingSpaceId.trim() !== "") {
-                        statusMap.set(parkingSpaceId.trim(), occupancyStatus.trim());
-                    }
-                }
-            }
-            return statusMap;
-        }
-
-        // --- Data Fetching: Turn Restrictions (KMZ) ---
-        async function loadTurnRestrictionsData() {
-            try {
-                console.log('Starting to load turn restrictions data from:', API_TURN_RESTRICTIONS_URL);
-                const response = await fetch(API_TURN_RESTRICTIONS_URL);
-                console.log('KMZ fetch response status:', response.status);
-                if (!response.ok) throw new Error('Failed to fetch turn restrictions KMZ data.');
-
-                const kmzBlob = await response.blob();
-                console.log('KMZ blob size:', kmzBlob.size);
-                const zip = await JSZip.loadAsync(kmzBlob);
-                console.log('KMZ files:', Object.keys(zip.files));
-
-                // Find the KML file in the KMZ
-                const kmlFile = Object.keys(zip.files).find(fileName => fileName.endsWith('.kml'));
-                console.log('Found KML file:', kmlFile);
-                if (!kmlFile) throw new Error('No KML file found in KMZ.');
-
-                const kmlText = await zip.files[kmlFile].async('text');
-                console.log('KML text length:', kmlText.length);
-                allTurnRestrictionsData = parseKMLToGeoJSON(kmlText);
-                console.log('Turn restrictions data loaded:', allTurnRestrictionsData.features.length, 'features');
-
-            } catch (error) {
-                console.error('Error loading turn restrictions data:', error);
-            }
-        }
-
-        function parseKMLToGeoJSON(kmlText) {
-            const parser = new DOMParser();
-            const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
-            const placemarks = kmlDoc.querySelectorAll('Placemark');
-            const features = [];
-
-            placemarks.forEach(placemark => {
-                const name = placemark.querySelector('name')?.textContent || '';
-                const description = placemark.querySelector('description')?.textContent || '';
-                const coordinates = placemark.querySelector('coordinates')?.textContent;
-
-                if (coordinates) {
-                    const coords = coordinates.trim().split(',').map(c => parseFloat(c));
-                    if (coords.length >= 2) {
-                        features.push({
-                            type: 'Feature',
-                            geometry: {
-                                type: 'Point',
-                                coordinates: [coords[0], coords[1]]
-                            },
-                            properties: {
-                                name: name,
-                                description: description
-                            }
-                        });
-                    }
-                }
-            });
-
-            return {
-                type: 'FeatureCollection',
-                features: features
-            };
-        }
-
-        async function loadParkingMetersData() {
-            if (!toggleParkingMeters.checked) return;
-
-            const t = i18n[currentLang];
-            try {
-                const bounds = map.getBounds();
-                const lowerCorner = `${bounds.getSouth()} ${bounds.getWest()}`;
-                const upperCorner = `${bounds.getNorth()} ${bounds.getEast()}`;
-                const filter = `<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${lowerCorner}</gml:lowerCorner><gml:upperCorner>${upperCorner}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
-                const maxFeatures = 500; 
-                const locationUrl = `${API_PARKING_METERS_BASE_URL}&maxFeatures=${maxFeatures}&filter=${encodeURIComponent(filter)}`;
-
-                const [locationResponse, statusResponse] = await Promise.all([
-                    fetch(locationUrl),
-                    fetch(API_PARKING_METERS_STATUS_URL)
-                ]);
-
-                if (!locationResponse.ok) throw new Error('Failed to fetch parking meter location data.');
-                if (!statusResponse.ok) throw new Error('Failed to fetch parking meter status data.');
-
-                const locationData = await locationResponse.json();
-                const statusText = await statusResponse.text();
-
-                allParkingMetersData = locationData.features || [];
-                parkingMeterStatusMap = parseCSVToMap(statusText);
-                
-                plotParkingMeters();
-
-            } catch (error) {
-                console.error('Error loading parking meters data:', error);
-                console.error(t.parkingMeterErrorBody);
-            }
-        }
-
-        // --- Data Decoding Helpers ---
-        function decodeVehicleType(code, t) {
-            if (!code) return t.unknown;
-            code = code.length > 1 ? code[code.length - 1] : code;
-            switch(code) {
-                case 'A': return t.vehicle_A;
-                case 'C': return t.vehicle_C;
-                case 'G': return t.vehicle_G;
-                case 'L': return t.vehicle_L || code;
-                case 'M': return t.vehicle_M || code;
-                default: return code;
-            }
-        }
-        
-        function decodeOperatingPeriod(code, t) {
-            if (!code) return t.unknown;
-            code = code.length > 1 ? code[code.length - 1] : code;
-             switch(code) {
-                case 'F': return t.op_F;
-                case 'N': return t.op_N;
-                case 'P': return t.op_P;
-                case 'D': return t.op_D;
-                case 'S': return t.op_S;
-                case 'H': return t.op_H;
-                case 'E': return t.op_E;
-                case 'Q': return t.op_Q;
-                case 'J': return t.op_J;
-                case 'A': return t.op_A;
-                case 'B': return t.op_B;
-                default: return code;
-            }
-        }
-
-        // --- Map Plotting: Car Parks ---
-        function plotCarparkMarkers(carparkList) {
-            markerLayer.clearLayers();
-            const icon = createCarparkIcon();
-            
-            carparkList.forEach(carpark => {
-                if (carpark.latitude && carpark.longitude) {
-                    const marker = L.marker([carpark.latitude, carpark.longitude], { icon: icon })
-                        .addTo(markerLayer);
-                        
-                    marker.on('click', () => {
-                        showCarparkInfo(carpark);
-                    });
-                }
-            });
-        }
-
-        // --- Map Plotting: Attractions ---
-        function plotAttractions() {
-            if (attractionsLayer) attractionsLayer.clearLayers();
-            if (!allAttractionsData) return;
-
-            const icon = createAttractionIcon();
-            const t = i18n[currentLang];
-            const nameKey = (currentLang === 'en_US') ? 'NAME_EN' : 'NAME_CH';
-            const locationKey = (currentLang === 'en_US') ? 'LOCATION_EN' : 'LOCATION_CH';
-
-            allAttractionsData.forEach(feature => {
-                const { coordinates } = feature.geometry;
-                const { properties } = feature;
-                
-                if (coordinates && coordinates.length === 2) {
-                    const latLng = [coordinates[1], coordinates[0]]; 
-                    const name = properties[nameKey] || t.notAvailable;
-                    const location = properties[locationKey] || t.notAvailable;
-                    const website = properties['WEBSITE'];
-
-                    const navigateHtml = `<button class="tooltip-navigate-btn" data-lat="${latLng[0]}" data-lon="${latLng[1]}">${t.navigate}</button>`;
-                    let websiteHtml = '';
-                    if (website && website.trim() !== '') {
-                        websiteHtml = `<br><a href="${website}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${t.website}</a>`;
-                    }
-
-                    const tooltipContent = `
-                        <div class="p-1">
-                            <strong class="text-base">${name}</strong>
-                            <br>
-                            <span class="text-sm">${location}</span>
-                            ${websiteHtml}
-                            <br>${navigateHtml}
-                        </div>
-                    `;
-
-                    const marker = L.marker(latLng, { icon: icon })
-                        .addTo(attractionsLayer);
-                        
-                    let closeTooltipTimer = null; 
-
-                    marker.bindTooltip(tooltipContent, { 
-                        permanent: false, 
-                        interactive: true 
-                    });
-
-                    const openTooltip = () => {
-                        if (closeTooltipTimer) {
-                            clearTimeout(closeTooltipTimer);
-                            closeTooltipTimer = null;
-                        }
-                        marker.openTooltip();
-                    };
-
-                    const startCloseTimer = () => {
-                        closeTooltipTimer = setTimeout(() => {
-                            marker.closeTooltip();
-                            closeTooltipTimer = null;
-                        }, 3000); 
-                    };
-
-                    marker.on('mouseover', openTooltip);
-                    marker.on('mouseout', startCloseTimer);
-
-                    marker.on('tooltipopen', function (e) {
-                        const tooltip = e.tooltip;
-                        if (tooltip) {
-                            tooltip.getElement().addEventListener('mouseover', openTooltip);
-                            tooltip.getElement().addEventListener('mouseout', startCloseTimer);
-                            
-                            // Add click listener for navigation button inside tooltip
-                            const btn = tooltip.getElement().querySelector('.tooltip-navigate-btn');
-                            if (btn && !btn.dataset.listenerAttached) {
-                                btn.addEventListener('click', () => {
-                                    handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
-                                });
-                                btn.dataset.listenerAttached = 'true';
-                            }
-                        }
-                    });
-                }
-            });
-        }
-
-        // --- Map Plotting: Viewing Points ---
-        function plotViewingPoints() {
-            if (viewingPointsLayer) viewingPointsLayer.clearLayers();
-            if (!allViewingPointsData) return;
-
-            const icon = createViewingPointIcon();
-            const t = i18n[currentLang];
-            const nameKey = (currentLang === 'en_US') ? 'Name_Eng' : 'Name_Chi';
-            const addressKey = (currentLang === 'en_US') ? 'Address_En' : 'Address_Chi';
-            const cpKey = (currentLang === 'en_US') ? 'CP_Eng' : 'CP_Chi';
-
-            allViewingPointsData.forEach(feature => {
-                const { coordinates } = feature.geometry;
-                const { properties } = feature;
-
-                if (coordinates && coordinates.length === 2) {
-                    const latLng = [coordinates[1], coordinates[0]]; 
-                    const name = properties[nameKey] || t.notAvailable;
-                    const countryPark = properties[cpKey] || t.notAvailable;
-                    const address = properties[addressKey] || t.notAvailable;
-
-                    const navigateHtml = `<button class="tooltip-navigate-btn" data-lat="${latLng[0]}" data-lon="${latLng[1]}">${t.navigate}</button>`;
-
-                    const tooltipContent = `
-                        <div class="p-1">
-                            <strong class="text-base">${name}</strong>
-                            <br>
-                            <span class="text-sm">${t.countryPark}: ${countryPark}</span>
-                            <br>
-                            <span class="text-sm">${t.address}: ${address}</span>
-                            <br>${navigateHtml}
-                        </div>
-                    `;
-
-                    const marker = L.marker(latLng, { icon: icon })
-                        .addTo(viewingPointsLayer);
-
-                    let closeTooltipTimer = null; 
-
-                    marker.bindTooltip(tooltipContent, {
-                        permanent: false, 
-                        interactive: true 
-                    });
-
-                    const openTooltip = () => {
-                        if (closeTooltipTimer) clearTimeout(closeTooltipTimer);
-                        closeTooltipTimer = null;
-                        marker.openTooltip();
-                    };
-
-                    const startCloseTimer = () => {
-                        closeTooltipTimer = setTimeout(() => {
-                            marker.closeTooltip();
-                            closeTooltipTimer = null;
-                        }, 3000);
-                    };
-
-                    marker.on('mouseover', openTooltip);
-                    marker.on('mouseout', startCloseTimer);
-
-                    marker.on('tooltipopen', function (e) {
-                        const tooltip = e.tooltip;
-                        if (tooltip) {
-                            tooltip.getElement().addEventListener('mouseover', openTooltip);
-                            tooltip.getElement().addEventListener('mouseout', startCloseTimer);
-
-                            // Add click listener for navigation button inside tooltip
-                            const btn = tooltip.getElement().querySelector('.tooltip-navigate-btn');
-                            if (btn && !btn.dataset.listenerAttached) {
-                                btn.addEventListener('click', () => {
-                                    handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
-                                });
-                                btn.dataset.listenerAttached = 'true';
-                            }
-                        }
-                    });
-                }
-            });
-        }
-
-        // --- Map Plotting: Parking Meters ---
-        function plotParkingMeters() {
-            if (parkingMetersLayer) parkingMetersLayer.clearLayers();
-            if (!allParkingMetersData || allParkingMetersData.length === 0) return;
-
-            const icon = createParkingMeterIcon();
-            const t = i18n[currentLang];
-
-            const groupedMeters = new Map();
-            const streetKey = (currentLang === 'en_US') ? 'Street' : (currentLang === 'zh_TW' ? 'Street_tc' : 'Street_sc');
-            const sectionKey = (currentLang === 'en_US') ? 'SectionOfStreet' : (currentLang === 'zh_TW' ? 'SectionOfStreet_tc' : 'SectionOfStreet_sc');
-
-            allParkingMetersData.forEach(feature => {
-                const { properties, geometry } = feature;
-                if (!geometry || !geometry.coordinates || geometry.coordinates.length !== 2) return;
-
-                const section = properties[sectionKey] || t.notAvailable;
-                const street = properties[streetKey] || t.notAvailable;
-                const groupingKey = `${street} | ${section}`;
-
-                if (!groupedMeters.has(groupingKey)) {
-                    const latLng = [geometry.coordinates[1], geometry.coordinates[0]];
-                    groupedMeters.set(groupingKey, {
-                        latLng: latLng,
-                        street: street,
-                        section: section,
-                        totalCount: 0,
-                        availableCount: 0,
-                        occupiedCount: 0,
-                        vehicleTypes: new Set(),
-                        opPeriods: new Set()
-                    });
-                }
-
-                const group = groupedMeters.get(groupingKey);
-                group.totalCount++;
-
-                const parkingSpaceId = properties.ParkingSpaceId;
-                const status = parkingMeterStatusMap.get(parkingSpaceId);
-
-                if (status === 'V') group.availableCount++;
-                else if (status === 'O') group.occupiedCount++;
-
-                if (properties.VehicleType) group.vehicleTypes.add(properties.VehicleType);
-                if (properties.OperatingPeriod) group.opPeriods.add(properties.OperatingPeriod);
-            });
-
-            groupedMeters.forEach(group => {
-                const vehicleTypesHtml = [...group.vehicleTypes]
-                    .map(code => `<span class="popup-list-item">&bull; ${decodeVehicleType(code, t)}</span>`)
-                    .join('');
-
-                const opPeriodsHtml = [...group.opPeriods]
-                    .map(code => `<span class="popup-list-item">&bull; ${decodeOperatingPeriod(code, t)}</span>`)
-                    .join('');
-
-                const navigateBtnHtml = `<button class="navigate-btn" data-lat="${group.latLng[0]}" data-lon="${group.latLng[1]}">${t.navigate}</button>`;
-
-                const popupContent = `
-                    <div>
-                        <div class="popup-title">${group.street}</div>
-                        <div class="popup-row"><span class="popup-label">${t.sectionOfStreet}:</span> ${group.section}</div>
-                        <hr class="my-2">
-                        <div class="popup-row"><span class="popup-label">${t.totalMeters}:</span> ${group.totalCount}</div>
-                        <div class="popup-row"><span class="popup-label">${t.availableMeters}:</span> <span class="font-bold text-green-600">${group.availableCount}</span></div>
-                        <div class="popup-row"><span class="popup-label">${t.occupiedMeters}:</span> <span class="font-bold text-red-600">${group.occupiedCount}</span></div>
-                        <hr class="my-2">
-                        <div class="popup-row"><span class="popup-label">${t.vehicleType}:</span> ${vehicleTypesHtml || t.notAvailable}</div>
-                        <div class="popup-row"><span class="popup-label">${t.operatingPeriod}:</span> ${opPeriodsHtml || t.notAvailable}</div>
-                        ${navigateBtnHtml}
-                    </div>
-                `;
-
-                L.marker(group.latLng, { icon: icon })
-                    .addTo(parkingMetersLayer)
-                    .bindPopup(popupContent);
-            });
-        }
-
-        // --- Map Plotting: Turn Restrictions ---
-        function plotTurnRestrictions() {
-            if (turnRestrictionsLayer) turnRestrictionsLayer.clearLayers();
-            if (!allTurnRestrictionsData || !allTurnRestrictionsData.features) return;
-
-            const icon = createTurnRestrictionIcon();
-
-            allTurnRestrictionsData.features.forEach(feature => {
-                const { geometry, properties } = feature;
-                if (!geometry || !geometry.coordinates || geometry.coordinates.length < 2) return;
-
-                const latLng = [geometry.coordinates[1], geometry.coordinates[0]];
-                const name = properties.name || 'Turn Restriction';
-                const description = properties.description || '';
-
-                const popupContent = `
-                    <div>
-                        <div class="popup-title">${name}</div>
-                        <div class="popup-row">${description}</div>
-                    </div>
-                `;
-
-                L.marker(latLng, { icon: icon })
-                    .addTo(turnRestrictionsLayer)
-                    .bindPopup(popupContent);
-            });
-        }
-
-        // --- Show Information Modal (for Car Parks) ---
-        function showCarparkInfo(carpark) {
-            const t = i18n[currentLang];
-            modalTitle.innerText = carpark.name || t.modalTitle;
-            
-            const formatInfo = (label, value, unit = '') => {
-                const displayValue = (value !== null && value !== undefined && value !== "") ? `${value}${unit}` : t.notAvailable;
-                return `<div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
-                            <dt class="text-sm font-medium leading-6 text-gray-900">${label}</dt>
-                            <dd class="mt-1 text-sm leading-6 text-gray-700 sm:col-span-2 sm:mt-0">${displayValue}</dd>
-                        </div>`;
-            };
-
-            let vacancyHtml = '';
-            const vacancyData = carpark.vacancyData;
-            if (vacancyData) {
-                const vehicleTypeLabels = { privateCar: t.vac_car, motorCycle: t.vac_moto, LGV: t.vac_lgv, HGV: t.vac_hgv, coach: t.vac_coach };
-                let hasVacancyInfo = false;
-                for (const key in vehicleTypeLabels) {
-                    if (vacancyData[key] && Array.isArray(vacancyData[key]) && vacancyData[key].length > 0) {
-                        const vacancyInfo = vacancyData[key][0];
-                        let vacancyText = t.notAvailable;
-                        if (vacancyInfo && vacancyInfo.vacancy !== undefined) {
-                            vacancyText = typeof vacancyInfo.vacancy === 'number' ? vacancyInfo.vacancy : (vacancyInfo.vacancy || t.notAvailable);
-                        }
-                        vacancyHtml += formatInfo(vehicleTypeLabels[key], vacancyText);
-                        hasVacancyInfo = true;
-                    }
-                }
-                if (!hasVacancyInfo) vacancyHtml = formatInfo(t.vacancy, t.noVacancyData);
-            } else {
-                vacancyHtml = formatInfo(t.vacancy, t.notAvailable);
+            // Remove routing control
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
             }
             
-            let priceHtml = '';
-            const hourlyCharges = carpark.privateCar?.hourlyCharges;
-            if (hourlyCharges && Array.isArray(hourlyCharges) && hourlyCharges.length > 0) {
-                hourlyCharges.forEach(charge => {
-                    const priceText = charge.price !== undefined ? `$${charge.price} / hour` : t.notAvailable;
-                    const remarkText = (charge.remark && charge.remark.trim() !== "") ? charge.remark : t.notAvailable; 
-                    const weekdays = charge.weekdays?.join(', ') || 'All Days'; 
-                    const period = (charge.periodStart && charge.periodEnd) ? `${charge.periodStart} - ${charge.periodEnd}` : 'All Hours';
-                    priceHtml += `
-                        <div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
-                            <dt class="text-sm font-medium leading-6 text-gray-900">${t.price_car}</dt>
-                            <dd class="mt-1 text-sm leading-6 text-gray-700 sm:col-span-2 sm:mt-0">
-                                <p class="font-semibold">${priceText}</p>
-                                <p class="text-xs text-gray-500">${weekdays} (${period})</p>
-                                ${remarkText !== t.notAvailable ? `<p class="text-xs text-gray-500 mt-1">(${remarkText})</p>` : ''}
-                            </dd>
-                        </div>`;
-                });
-            } else {
-                priceHtml = formatInfo(t.price_car, t.notAvailable);
+            // Remove route panel
+            if (routePanel) {
+                routePanel.remove();
+                routePanel = null;
             }
-
-            const heightLimit = carpark.heightLimits?.[0];
-            const heightText = heightLimit ? `${heightLimit.height} m` : t.notAvailable;
-            const remarkText = (heightLimit && heightLimit.remark && heightLimit.remark.trim() !== "") ? heightLimit.remark : t.notAvailable;
-            const statusText = carpark.opening_status || t.notAvailable;
-            const statusColor = (statusText === 'OPEN' || statusText === '開啟' || statusText === '开启') ? 'text-green-600' : 'text-red-600';
-            const navigateBtnHtml = `<button id="modal-navigate-btn" class="navigate-btn" data-lat="${carpark.latitude}" data-lon="${carpark.longitude}">${t.navigate}</button>`;
-
-            modalContent.innerHTML = `
-                <dl class="divide-y divide-gray-100">
-                    ${formatInfo(t.address, carpark.displayAddress)}
-                    ${formatInfo(t.parkId, carpark.park_Id)}
-                    <div class="py-2 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
-                        <dt class="text-sm font-medium leading-6 text-gray-900">${t.status}</dt>
-                        <dd class="mt-1 text-sm font-bold leading-6 ${statusColor} sm:col-span-2 sm:mt-0">${statusText}</dd>
-                    </div>
-                    ${vacancyHtml}
-                    ${priceHtml}
-                    ${formatInfo(t.heightLimit, heightText)}
-                    ${formatInfo(t.remarks, remarkText)}
-                </dl>
-                ${navigateBtnHtml}
-            `;
             
-            const navBtn = document.getElementById('modal-navigate-btn');
-            if (navBtn) {
-                navBtn.addEventListener('click', () => {
-                    handleNavigationClick(navBtn.dataset.lat, navBtn.dataset.lon);
-                });
-            }
+            // Clear route data
+            currentRoute = null;
+            currentInstructionIndex = 0;
+            
+            // Clear route hazards layer
+            routeTurnRestrictionsLayer.clearLayers();
+            
+            // Show notification
+            showNavigationNotification('Navigation stopped.');
+        }
 
+        // --- Modal Display Function ---
+        function showModal(title, body) {
+            modalTitle.textContent = title;
+            modalContent.innerHTML = `<p>${body}</p>`;
             infoModal.classList.remove('hidden');
         }
 
-        // --- Utility Functions ---
-        function showLoading(isLoading) {
-            if (isLoading) {
-                loadingSpinner.classList.remove('hidden');
-            } else {
-                loadingSpinner.classList.add('hidden');
+        // --- Map Move End Handler (for parking meters) ---
+        map.on('moveend', function() {
+            // Debounce to avoid too many requests
+            if (moveEndTimer) {
+                clearTimeout(moveEndTimer);
             }
-        }
-
-        // Debounced map move handler
-        function handleMapMove() {
-            clearTimeout(moveEndTimer);
+            
             moveEndTimer = setTimeout(() => {
-                loadParkingMetersData();
-            }, 500); // 500ms delay
-        }
-
-        // --- Initial Load ---
-        updateLangUI();
-        loadCarparkData();
-        
-        // Add listener for map movement
-        map.on('moveend', handleMapMove);
-
-        // Add popupopen listener for parking meter navigation buttons
-        map.on('popupopen', (e) => {
-            const popup = e.popup;
-            const btn = popup.getElement().querySelector('.navigate-btn');
-            if (btn) {
-                if (!btn.dataset.listenerAttached) {
-                    btn.addEventListener('click', () => {
-                        handleNavigationClick(btn.dataset.lat, btn.dataset.lon);
-                    });
-                    btn.dataset.listenerAttached = 'true';
+                // If parking meters layer is visible, reload data for current view
+                if (toggleParkingMeters.checked) {
+                    // Clear cached data to force reload
+                    allParkingMetersData = null;
+                    loadParkingMetersData();
                 }
+            }, 500);
+        });
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set initial language
+            updateLangUI();
+            
+            // Load initial data (car parks)
+            loadCarparkData();
+            
+            // Set up layer controls
+            if (toggleCarparks.checked) {
+                map.addLayer(markerLayer);
             }
+            
+            // Add route turn restrictions layer to map (initially empty)
+            map.addLayer(routeTurnRestrictionsLayer);
         });
     </script>
 </body>
 </html>
-
-
