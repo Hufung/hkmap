@@ -1,4 +1,4 @@
-dd<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -579,6 +579,7 @@ dd<!DOCTYPE html>
         const map = L.map('map').setView([22.3193, 114.1694], 12);
         
         // Initialize marker layers
+        let trafficFeaturesLayer = L.layerGroup();
         markerLayer = L.layerGroup().addTo(map); // Car parks, on by default
         attractionsLayer = L.layerGroup(); // Attractions, off by default
         viewingPointsLayer = L.layerGroup(); // Viewing Points, off by default
@@ -637,6 +638,7 @@ dd<!DOCTYPE html>
                 infoModal.classList.add('hidden');
             }
         });
+        loadTrafficFeatures(latitude, longitude);
 
         // --- Language Switcher Controls ---
         function updateLangUI() {
@@ -1015,6 +1017,26 @@ dd<!DOCTYPE html>
                 );
             }
         }
+        async function loadTrafficFeatures(lat, lng) {
+    const radius = 3; // kilometers
+    const delta = radius / 111; // roughly degrees per km
+
+    const minLat = lat - delta;
+    const maxLat = lat + delta;
+    const minLng = lng - delta;
+    const maxLng = lng + delta;
+
+    const wfsUrl = `https://portal.csdi.gov.hk/server/services/common/td_rcd_1638949160594_2844/MapServer/WFSServer?service=wfs&request=GetFeature&typenames=TRAFFIC_FEATURES&outputFormat=geojson&maxFeatures=2000&srsName=EPSG:4326&filter=<Filter><Intersects><PropertyName>SHAPE</PropertyName><gml:Envelope srsName='EPSG:4326'><gml:lowerCorner>${minLat} ${minLng}</gml:lowerCorner><gml:upperCorner>${maxLat} ${maxLng}</gml:upperCorner></gml:Envelope></Intersects></Filter>`;
+
+    try {
+        const response = await fetch(wfsUrl);
+        if (!response.ok) throw new Error(`HTTP error! ${response.status}`);
+        const data = await response.json();
+        plotTrafficFeatures(data.features, lat, lng);
+    } catch (e) {
+        console.error('Failed to load traffic features:', e);
+    }
+}
 
         function stopNavigation() {
             navigationMode = false;
@@ -1043,6 +1065,47 @@ dd<!DOCTYPE html>
                 positionWatchId = null;
             }
         }
+        function plotTrafficFeatures(features, userLat, userLng) {
+    trafficFeaturesLayer.clearLayers();
+
+    features.forEach(f => {
+        const coords = f.geometry.coordinates;
+        const lat = coords[1];
+        const lng = coords[0];
+        const type = f.properties.TYPE; // 1,2,3,4
+
+        let color, label;
+        switch (type) {
+            case 1: color = 'black'; label = '斑馬線 (Zebra Crossing)'; break;
+            case 2: color = 'yellow'; label = '黃色盒子 (Yellow Box)'; break;
+            case 3: color = 'red'; label = '收費 (Toll)'; break;
+            case 4: color = 'gray'; label = '盡頭 (Dead End)'; break;
+            default: color = 'blue'; label = '未知 (Unknown)'; break;
+        }
+
+        const icon = L.divIcon({
+            className: 'traffic-feature-icon',
+            html: `<div style="background:${color};width:16px;height:16px;border-radius:50%;border:2px solid white;"></div>`,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+
+        const marker = L.marker([lat, lng], { icon })
+            .bindPopup(`<b>${label}</b>`)
+            .addTo(trafficFeaturesLayer);
+
+        // Notify when user gets close (within 100m)
+        const distance = map.distance([userLat, userLng], [lat, lng]);
+        if (distance < 100) {
+            showModal('Traffic Feature Nearby', `You are near a ${label}.`);
+        }
+    });
+
+    map.addLayer(trafficFeaturesLayer);
+}
+
+        loadTrafficFeatures(latitude, longitude);
+showNavigationNotification(`Nearby: ${label}`);
 
         function filterTurnRestrictionsAlongRoute(route) {
             console.log('Starting filterTurnRestrictionsAlongRoute');
@@ -1960,3 +2023,4 @@ dd<!DOCTYPE html>
     </script>
 </body>
 </html>
+
