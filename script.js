@@ -60,6 +60,13 @@ const appState = {
 
 const TILE_FETCH_THRESHOLD = 0.1;
 
+// Zoom level thresholds for hiding pins
+const ZOOM_THRESHOLDS = {
+    SHOW_ALL_PINS: 14,
+    SHOW_MAJOR_PINS: 12,
+    HIDE_MOST_PINS: 10
+};
+
 // Remove unused CORS proxy constants
 
 // API endpoints
@@ -1168,15 +1175,31 @@ function plotCarparks() {
     layer.clearLayers();
     const icon = createCarparkIcon();
     const bounds = appState.map.getBounds();
+    const currentZoom = appState.map.getZoom();
+    
     const carparksToDisplay = appState.carparkData.filter(cp => {
         if (!cp.latitude || !cp.longitude) return false;
         if (!bounds.contains([cp.latitude, cp.longitude])) return false;
+        
+        // Apply zoom-based filtering
+        if (currentZoom < ZOOM_THRESHOLDS.HIDE_MOST_PINS) {
+            // At very low zoom, only show major carparks (those with high capacity or special status)
+            return cp.opening_status === 'OPEN' && (cp.privateCar?.totalSpaces > 100 || cp.name?.includes('Government'));
+        } else if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+            // At medium zoom, show open carparks with reasonable capacity
+            return cp.opening_status === 'OPEN' && (cp.privateCar?.totalSpaces > 50 || !cp.privateCar?.totalSpaces);
+        } else if (currentZoom < ZOOM_THRESHOLDS.SHOW_ALL_PINS) {
+            // At higher zoom, show all open carparks
+            return cp.opening_status === 'OPEN';
+        }
+        // At highest zoom, show all carparks regardless of status
+        
         if (appState.searchQuery) {
             return (cp.name && cp.name.toLowerCase().includes(appState.searchQuery.toLowerCase())) ||
                    (cp.displayAddress && cp.displayAddress.toLowerCase().includes(appState.searchQuery.toLowerCase()));
         }
         return true;
-    });
+    }).slice(0, 100);
 
     carparksToDisplay.forEach(carpark => {
         L.marker([carpark.latitude, carpark.longitude], { icon })
@@ -1185,12 +1208,65 @@ function plotCarparks() {
     });
 }
 
+function plotOilStations() {
+    const layer = appState.layers.oilStations;
+    if (!layer || !appState.map) return;
+    layer.clearLayers();
+    const bounds = appState.map.getBounds();
+    const currentZoom = appState.map.getZoom();
+    const t = i18n[appState.language];
+    
+    // Apply zoom-based filtering
+    if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+        return;
+    }
+    
+    const oilStationsInView = appState.oilStationData.filter(station => {
+        return station.latitude && station.longitude && bounds.contains([station.latitude, station.longitude]);
+    }).slice(0, 10);
+    
+    oilStationsInView.forEach(station => {
+        const fuelsList = station.fuels.map(fuel => { 
+            const price = appState.oilPriceData.get(station.company)?.get(fuel); 
+            return `<li class="ml-4 list-disc flex justify-between"><span>${fuel}</span>${price ? `<span class="font-bold text-green-700 ml-2">$${price.toFixed(2)}</span>` : ''}</li>`; 
+        }).join('');
+        const popupHtml = `<div class="text-sm w-64"><div class="flex items-center mb-1"><div class="w-8 h-8 flex-shrink-0 mr-2 flex items-center justify-center">${OilStationSVG}</div><div class="flex-grow"><div class="font-bold text-base leading-tight">${station.name}</div><div class="text-xs text-gray-500 italic">${station.company}</div></div></div><div class="text-xs text-gray-600 mb-2">${station.address}</div><hr class="my-1">${fuelsList ? `<div class="mt-2"><span class="font-semibold">${t.fuelsAvailable}:</span><ul class="list-none pl-0 mt-1">${fuelsList}</ul></div>` : ''}<button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${station.latitude}" data-lon="${station.longitude}">${t.navigate}</button></div>`;
+        L.marker([station.latitude, station.longitude], { icon: createOilStationIcon() }).addTo(layer).bindPopup(popupHtml, { maxWidth: 300 });
+    });
+}
 function plotStaticLayer(layerKey, data, iconCreator, popupContentFn) {
     const layer = appState.layers[layerKey];
     if (!layer) return;
     layer.clearLayers();
     const icon = iconCreator();
-    data.forEach(item => {
+    const currentZoom = appState.map.getZoom();
+    
+    // Apply zoom-based filtering for different layer types
+    const filteredData = data.filter(item => {
+        if (currentZoom < ZOOM_THRESHOLDS.HIDE_MOST_PINS) {
+            // At very low zoom, hide most pins except major attractions
+            if (layerKey === 'attractions' || layerKey === 'viewingPoints') {
+                return true; // Keep major attractions visible
+            }
+            return false; // Hide other types
+        } else if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+            // At medium zoom, show important pins
+            if (layerKey === 'evChargers') {
+                return true;
+            }
+            if (layerKey === 'attractions' || layerKey === 'viewingPoints') {
+                return true;
+            }
+            return false;
+        } else if (currentZoom < ZOOM_THRESHOLDS.SHOW_ALL_PINS) {
+            // At higher zoom, show most pins
+            return layerKey !== 'permits' && layerKey !== 'prohibitions';
+        }
+        // At highest zoom, show all pins
+        return true;
+    });
+    
+    filteredData.forEach(item => {
         let lat, lon;
         // Check if it's a GeoJSON feature or a custom object with lat/lon
         if (item.geometry && item.geometry.coordinates) {
@@ -1324,6 +1400,12 @@ function processParkingMeters(metersInView) {
     const t = i18n[appState.language];
     const streetKey = appState.language === 'en_US' ? 'Street' : (appState.language === 'zh_TW' ? 'Street_tc' : 'Street_sc');
     const sectionKey = appState.language === 'en_US' ? 'SectionOfStreet' : (appState.language === 'zh_TW' ? 'SectionOfStreet_tc' : 'SectionOfStreet_sc');
+    const currentZoom = appState.map.getZoom();
+    
+    // Skip rendering if zoom is too low
+    if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+        return;
+    }
 
     metersInView.forEach(f => {
         if (!f.geometry?.coordinates) return;
@@ -1359,6 +1441,13 @@ function processParkingMeters(metersInView) {
 function processTrafficFeatures(features) {
     const layer = appState.layers.trafficFeatures;
     layer.clearLayers();
+    const currentZoom = appState.map.getZoom();
+    
+    // Only show traffic features at high zoom levels
+    if (currentZoom < ZOOM_THRESHOLDS.SHOW_ALL_PINS) {
+        return;
+    }
+    
     features.forEach(feature => {
         if (!feature.geometry?.coordinates) return;
         const [lon, lat] = feature.geometry.coordinates;
@@ -1374,6 +1463,12 @@ function processToilets(features) {
     const nameKey = appState.language === 'en_US' ? 'Name_en' : (appState.language === 'zh_TW' ? 'Name_zh_Hant' : 'Name_zh_Hans');
     const addressKey = appState.language === 'en_US' ? 'Address_en' : (appState.language === 'zh_TW' ? 'Address_zh_Hant' : 'Address_zh_Hans');
     const afcdNameKey = appState.language === 'en_US' ? 'Name_Eng' : 'Name_Chi';
+    const currentZoom = appState.map.getZoom();
+    
+    // Only show toilets at medium to high zoom levels
+    if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+        return;
+    }
 
     features.forEach(feature => {
         if (!feature.geometry?.coordinates) return;
@@ -1988,10 +2083,6 @@ function updateAllStaticLayers() {
         const chargerList = Object.entries(chargerCounts).filter(([, count]) => count > 0).map(([type, count]) => `<li class="ml-4 list-disc">${type}: <strong>${count}</strong></li>`).join('');
         return `<div class="text-sm w-64"><div class="font-bold text-base mb-1">${p[appState.language === 'en_US' ? 'LOCATION_EN' : (appState.language === 'zh_TW' ? 'LOCATION_TC' : 'LOCATION_SC')]}</div><div class="mb-2 text-xs text-gray-600">${p[appState.language === 'en_US' ? 'ADDRESS_EN' : (appState.language === 'zh_TW' ? 'ADDRESS_TC' : 'ADDRESS_SC')]}</div><hr class="my-1">${chargerList ? `<div class="mt-2"><span class="font-semibold">${t.charger_types}:</span><ul class="list-none pl-0 mt-1">${chargerList}</ul></div>` : ''}<button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${lat}" data-lon="${lon}">${t.navigate}</button></div>`;
     });
-    plotStaticLayer('oilStations', appState.oilStationData, createOilStationIcon, (station, lat, lon) => {
-        const fuelsList = station.fuels.map(fuel => { const price = appState.oilPriceData.get(station.company)?.get(fuel); return `<li class="ml-4 list-disc flex justify-between"><span>${fuel}</span>${price ? `<span class="font-bold text-green-700 ml-2">$${price.toFixed(2)}</span>` : ''}</li>`; }).join('');
-        return `<div class="text-sm w-64"><div class="flex items-center mb-1"><div class="w-8 h-8 flex-shrink-0 mr-2 flex items-center justify-center">${OilStationSVG}</div><div class="flex-grow"><div class="font-bold text-base leading-tight">${station.name}</div><div class="text-xs text-gray-500 italic">${station.company}</div></div></div><div class="text-xs text-gray-600 mb-2">${station.address}</div><hr class="my-1">${fuelsList ? `<div class="mt-2"><span class="font-semibold">${t.fuelsAvailable}:</span><ul class="list-none pl-0 mt-1">${fuelsList}</ul></div>` : ''}<button class="navigate-btn w-full mt-2 bg-blue-600 text-white font-bold py-1 px-2 rounded hover:bg-blue-700" data-lat="${lat}" data-lon="${lon}">${t.navigate}</button></div>`;
-    });
     plotStaticLayer('turnRestrictions', appState.turnRestrictionsData, createTurnRestrictionIcon, (f) => `<strong>${t.turnRestrictionWarning}</strong><br>${f.properties.name}`);
     plotStaticLayer('permits', appState.permitData, createPermitIcon, (f) => `<strong>Permit ID: ${f.properties.PERMIT_ID}</strong><br>${f.properties.REMARKS || 'No remarks'}`);
     plotStaticLayer('prohibitions', appState.prohibitionData, createProhibitionIcon, (f) => `<strong>Prohibition</strong><br>Type: ${f.properties.EXC_VEH_TYPE}<br>${f.properties.REMARKS || 'No remarks'}`);
@@ -2068,6 +2159,12 @@ function processGenuineRetailers(retailers) {
     layer.clearLayers();
     const t = i18n[appState.language];
     const filteredRetailers = getFilteredRetailers();
+    const currentZoom = appState.map.getZoom();
+    
+    // Only show retailers at medium to high zoom levels
+    if (currentZoom < ZOOM_THRESHOLDS.SHOW_MAJOR_PINS) {
+        return;
+    }
 
     // Group retailers by unique location (coordinates rounded to 5 decimals)
     const groupedRetailers = new Map();
@@ -2280,6 +2377,7 @@ async function init() {
     const handleMapEvents = () => {
         handleMapViewChange();
         if (appState.visibleLayers.carparks) plotCarparks();
+        if (appState.visibleLayers.oilStations) plotOilStations();
         plotDynamicLayer('parkingMeters', fetchParkingMetersInBounds, processParkingMeters);
         plotDynamicLayer('trafficFeatures', fetchTrafficFeaturesInBounds, processTrafficFeatures);
         plotDynamicLayer('toilets', fetchToiletsInBounds, processToilets);
