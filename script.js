@@ -60,12 +60,7 @@ const appState = {
 
 const TILE_FETCH_THRESHOLD = 0.1;
 
-// Multiple CORS proxy options for fallback
-const CORS_PROXIES = [
-    'https://api.allorigins.win/raw?url=',
-    'https://corsproxy.io/?',
-    'https://cors-anywhere.herokuapp.com/'
-];
+// Remove unused CORS proxy constants
 
 // API endpoints
 const API_INFO_BASE_URL = 'https://api.data.gov.hk/v1/carpark-info-vacancy?data=info';
@@ -144,7 +139,8 @@ const i18n = {
         apiStatusChecking: 'Checking APIs...',
         apiStatusOnline: 'APIs Online',
         apiStatusOffline: 'Some APIs Offline',
-        apiStatusError: 'API Error'
+        apiStatusError: 'API Error',
+        landmarkName: 'Sai Kung Pier'
     }, 
     'zh_TW': { 
         modalTitle: '停車場詳情', address: '地址', parkId: '停車場ID', status: '狀態', 
@@ -195,7 +191,8 @@ const i18n = {
         apiStatusChecking: '檢查API中...',
         apiStatusOnline: 'API在線',
         apiStatusOffline: '部分API離線',
-        apiStatusError: 'API錯誤'
+        apiStatusError: 'API錯誤',
+        landmarkName: '西貢碼頭'
     }, 
     'zh_CN': { 
         modalTitle: '停车场详情', address: '地址', parkId: '停车场ID', status: '状态', 
@@ -246,7 +243,8 @@ const i18n = {
         apiStatusChecking: '检查API中...',
         apiStatusOnline: 'API在线',
         apiStatusOffline: '部分API离线',
-        apiStatusError: 'API错误'
+        apiStatusError: 'API错误',
+        landmarkName: '西貢碼頭'
     }, 
 };
 
@@ -297,39 +295,15 @@ function isPointInPolygon(point, polygon) {
     return inside;
 }
 
-// Improved CORS handling with fallback
+// Disable CORS for development - use direct fetch only
 async function fetchWithCorsFallback(url, options = {}) {
-    let lastError;
-    
-    // Try direct fetch first
     try {
         const response = await fetch(url, options);
-        if (response.ok) return response;
-        lastError = new Error(`HTTP ${response.status}`);
-    } catch (e) {
-        lastError = e;
-        // console.log('Direct fetch failed, trying proxies...');
+        return response;
+    } catch (error) {
+        console.warn('Fetch failed for:', url, error.message);
+        throw error;
     }
-    
-    // Try through proxies
-    for (const proxy of CORS_PROXIES) {
-        try {
-            const proxyUrl = proxy + encodeURIComponent(url);
-            console.log('Trying proxy:', proxy);
-            const response = await fetch(proxyUrl, options);
-            if (response.ok) {
-                console.log('Proxy succeeded:', proxy);
-                return response;
-            }
-        } catch (e) {
-            console.log('Proxy failed:', proxy, e.message);
-            lastError = e;
-            continue;
-        }
-    }
-    
-    console.warn('All fetch attempts failed for:', url);
-    throw lastError || new Error('All fetch attempts failed');
 }
 
 // Retry mechanism for critical APIs
@@ -746,36 +720,9 @@ async function fetchOilPriceData() {
     try {
         updateApiProgress(70, 'Loading fuel prices...');
         
-        // Try multiple proxy approaches for consumer.org.hk
-        let response = null;
-        let lastError = null;
-        
-        for (const proxy of CORS_PROXIES) {
-            try {
-                const proxyUrl = proxy + encodeURIComponent(API_OIL_PRICES_URL);
-                console.log('Trying oil price proxy:', proxy);
-                response = await fetch(proxyUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    console.log('Oil price proxy succeeded:', proxy);
-                    break;
-                }
-            } catch (error) {
-                console.log('Oil price proxy failed:', proxy, error.message);
-                lastError = error;
-                response = null;
-                continue;
-            }
-        }
-        
-        if (!response || !response.ok) {
-            throw lastError || new Error('All oil price proxy attempts failed');
+        const response = await fetchWithCorsFallback(API_OIL_PRICES_URL);
+        if (!response.ok) {
+            throw new Error('Failed to fetch oil price data');
         }
         
         const data = await response.json();
@@ -1573,7 +1520,7 @@ function plotDLOBoundary() {
                 style: {
                     color: '#000000',
                     weight: 2,
-                    opacity: 0.9,
+                    opacity: 0.4,
                     fillColor: '#000000',
                     fillOpacity: 0.5
                 }
@@ -1585,6 +1532,7 @@ function plotDLOBoundary() {
     });
     
     // Add landmark pin with Apple Maps style and star icon
+    const t = i18n[appState.language];
     const starIconSVG = `<svg fill="white" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
     const landmarkIcon = L.divIcon({
         html: `
@@ -1601,8 +1549,401 @@ function plotDLOBoundary() {
     
     L.marker([22.381600850401114, 114.2741535913527], { icon: landmarkIcon })
         .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">${t.landmarkName}</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.381600850401114" data-lon="114.2741535913527">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
         .on('click', () => {
             const pinPoint = [114.2741535913527, 22.381600850401114]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    // Add Sha Tin Che Kung Temple landmark
+    L.marker([22.373341105423428, 114.18284906736773], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Sha Tin Che Kung Temple<br>沙田車公廟</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.373341105423428" data-lon="114.18284906736773">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.18284906736773, 22.373341105423428]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    // Add Victoria Peak landmark
+    L.marker([22.2706, 114.1490], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Victoria Peak<br>太平山頂</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.2706" data-lon="114.1490">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.1490, 22.2706]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    // Add Spiral Lookout Tower landmark
+    L.marker([22.450164764654023, 114.17999826123236], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Spiral Lookout Tower<br>香港回歸紀念塔</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.450164764654023" data-lon="114.17999826123236">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.17999826123236, 22.450164764654023]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    // Add Golden Bauhinia Square landmark
+    L.marker([22.28441158121895, 114.1739358456004], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Golden Bauhinia Square<br>金紫荊廣場</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.1739358456004, 22.28441158121895]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    L.marker([22.309851245063562, 114.219004046426], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Kwun Tong Waterfront Garden<br>觀塘海濱花園</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.219004046426, 22.309851245063562]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    L.marker([22.292986163652223, 114.17404569151309], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2"> Avenue of Stars HK<br>星光大道</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.17404569151309, 22.292986163652223]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    L.marker([22.375057319042117, 114.10999915556116], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">The Mills<br>南豐紗廠</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.10999915556116, 22.375057319042117]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    
+    L.marker([22.31565936093672, 113.93652470797652], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Hong Kong International Airport<br>香港國際機場</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [113.93652470797652, 22.31565936093672]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+
+    L.marker([22.37094274478827, 113.99285781478487], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Hong Kong Gold Coast<br>香港黃金海岸</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [113.99285781478487, 22.37094274478827]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+
+    L.marker([22.4681662465422, 114.00402160890745], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Hong Kong Wetland Park<br>香港濕地公園</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.00402160890745, 22.4681662465422]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+
+
+    L.marker([22.5299847957407, 114.15559631131414], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Wun Chuen Sin Kwoon Taoist Temple<br>雲泉仙館</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.15559631131414, 22.5299847957407]; // [lng, lat]
+            
+            // Find the boundary containing this point
+            appState.dloBoundaryData.forEach(feature => {
+                if (feature.geoJsonLayer && feature.geometry) {
+                    const coords = feature.geometry.coordinates;
+                    if (feature.geometry.type === 'Polygon' && isPointInPolygon(pinPoint, coords[0])) {
+                        feature.geoJsonLayer.eachLayer(sublayer => {
+                            sublayer.setStyle({ fillOpacity: 0 });
+                        });
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        coords.forEach(polygon => {
+                            if (isPointInPolygon(pinPoint, polygon[0])) {
+                                feature.geoJsonLayer.eachLayer(sublayer => {
+                                    sublayer.setStyle({ fillOpacity: 0 });
+                                });
+                            }
+                        });
+                    }
+                }
+            });
+        });
+    L.marker([22.33203535011694, 114.19024845693194], { icon: landmarkIcon })
+        .addTo(layer)
+        .bindPopup(`
+            <div class="text-sm w-64">
+                <div class="font-bold text-base mb-2">Kowloon Walled City Park<br>九龍寨城公園</div>
+                <button class="navigate-btn w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors" data-lat="22.28441158121895" data-lon="114.1739358456004">${t.navigate}</button>
+            </div>
+        `, { maxWidth: 300 })
+        .on('click', () => {
+            const pinPoint = [114.19024845693194, 22.33203535011694]; // [lng, lat]
             
             // Find the boundary containing this point
             appState.dloBoundaryData.forEach(feature => {
