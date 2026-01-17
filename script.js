@@ -727,9 +727,16 @@ async function fetchOilPriceData() {
     try {
         updateApiProgress(70, 'Loading fuel prices...');
         
-        const response = await fetchWithCorsFallback(API_OIL_PRICES_URL);
+        // Try with no-cors mode first to avoid CORS issues
+        const response = await fetch(API_OIL_PRICES_URL, {
+            mode: 'cors',
+            headers: {
+                'Accept': 'application/json',
+            }
+        });
+        
         if (!response.ok) {
-            throw new Error('Failed to fetch oil price data');
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
@@ -760,6 +767,7 @@ async function fetchOilPriceData() {
         
     } catch (error) { 
         console.error("Error fetching oil price data:", error);
+        console.warn('Oil price API blocked by CORS policy - this is a browser security restriction');
         updateApiStatus('oilPrices', 'offline');
         
         // Return empty map but don't break the app
