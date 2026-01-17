@@ -46,6 +46,7 @@ const appState = {
     routingControl: null,
     positionWatchId: null,
     warnedFeatures: new Set(),
+    warnedProximityFeatures: new Set(),
     isFetchingRoads: false,
     userLocationMarker: null,
     apiStatus: {
@@ -334,6 +335,24 @@ const speak = (text) => {
         window.speechSynthesis.speak(utterance);
     }
 };
+
+function checkProximityToTurnRestrictions(userLatLng) {
+    const threshold = 100; // meters
+    appState.turnRestrictionsData.forEach(feature => {
+        if (!feature.geometry?.coordinates) return;
+        const [lon, lat] = feature.geometry.coordinates;
+        const restrictionLatLng = L.latLng(lat, lon);
+        const distance = userLatLng.distanceTo(restrictionLatLng);
+        if (distance < threshold) {
+            const featureId = `${lat}_${lon}`;
+            if (!appState.warnedProximityFeatures.has(featureId)) {
+                appState.warnedProximityFeatures.add(featureId);
+                const t = i18n[appState.language];
+                showNotification(t.turnRestrictionWarning, true);
+            }
+        }
+    });
+}
 
 const showNotification = (message, shouldSpeak = true) => {
     notificationContainer.innerHTML = ''; // Clear previous
@@ -727,12 +746,17 @@ async function fetchOilPriceData() {
     try {
         updateApiProgress(70, 'Loading fuel prices...');
         
-        const response = await fetchWithCorsFallback(API_OIL_PRICES_URL);
+        // Use a CORS proxy for the oil price API
+        const proxyUrl = 'https://api.allorigins.win/get?url=';
+        const targetUrl = encodeURIComponent(API_OIL_PRICES_URL);
+        const response = await fetch(proxyUrl + targetUrl);
+        
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        const data = await response.json();
+        const proxyData = await response.json();
+        const data = JSON.parse(proxyData.contents);
         const priceMap = new Map();
         
         if (Array.isArray(data)) {
@@ -2359,6 +2383,7 @@ async function init() {
         } else {
             appState.userLocationMarker = L.marker(e.latlng).addTo(appState.map).bindPopup(t.userLocationPopup.replace('{accuracy}', e.accuracy.toFixed(0)));
         }
+        checkProximityToTurnRestrictions(e.latlng);
     });
     
     appState.map.on('popupopen', (e) => {
