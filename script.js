@@ -2548,7 +2548,7 @@ async function sendChatMessage(message) {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     try {
-        const systemPrompt = "You are an AI assistant for planning journeys in Hong Kong. Help users plan their trips by suggesting detailed itineraries with specific time points, routes, and provide useful information about places to visit. Include estimated times for activities and travel between locations. Be helpful and informative.";
+        const systemPrompt = "You are an AI assistant for planning journeys in Hong Kong. Help users plan their trips by suggesting detailed itineraries with specific time points, routes, and provide useful information about places to visit. Include estimated times for activities and travel between locations. Be helpful and informative. Base configuration language='Traditional Chinese'";
 
         const data = {
             model: "deepseek-v3.2",
