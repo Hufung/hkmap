@@ -12,6 +12,9 @@ L.Icon.Default.mergeOptions({
 // 1. STATE & CONSTANTS
 // -------------------------------------------------
 
+const AI_API_KEY = 'sk-IdcnsqNq9WPmCLKvMRtZr4Q55ax85W0uBauQsOxIgfILnDe6';
+const AI_API_URL = 'https://api.chatanywhere.tech/v1/chat/completions';
+
 const appState = {
     map: null,
     language: 'en_US',
@@ -467,6 +470,26 @@ function setupUIControls() {
     const layerHeader = layerControlContainer.parentElement.previousElementSibling;
     if (layerHeader) {
         layerHeader.click();
+    }
+
+    // Chat listeners
+    const chatInput = document.getElementById('chat-input');
+    const sendChatBtn = document.getElementById('send-chat-btn');
+    if (sendChatBtn) {
+        sendChatBtn.addEventListener('click', () => {
+            const message = chatInput.value.trim();
+            if (message) {
+                sendChatMessage(message);
+                chatInput.value = '';
+            }
+        });
+    }
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendChatBtn.click();
+            }
+        });
     }
 }
 
@@ -2497,6 +2520,67 @@ async function loadInitialData() {
             updateLoadingSpinner(false);
         }, 1000);
     }
+}
+
+// AI Chat Functions
+async function sendChatMessage(message) {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+
+    // Add user message
+    const userMsg = document.createElement('div');
+    userMsg.className = 'mb-2';
+    userMsg.innerHTML = `<strong>You:</strong> ${message}`;
+    chatMessages.appendChild(userMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Add AI thinking
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'mb-2';
+    aiMsg.innerHTML = `<strong>AI:</strong> Thinking...`;
+    chatMessages.appendChild(aiMsg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    try {
+        const systemPrompt = "You are an AI assistant for planning journeys in Hong Kong. Help users plan their trips by suggesting detailed itineraries with specific time points, routes, transportation options, and provide useful information about places to visit. Include estimated times for activities and travel between locations. Be helpful and informative.";
+
+        const data = {
+            model: "deepseek-v3.2",
+            messages: [
+                {
+                    role: "system",
+                    content: systemPrompt
+                },
+                {
+                    role: "user",
+                    content: message
+                }
+            ]
+        };
+
+        const response = await fetch(AI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${AI_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const aiResponse = result.choices[0].message.content;
+
+        aiMsg.innerHTML = `<strong>AI:</strong> ${aiResponse.replace(/\n/g, '<br>')}`;
+    } catch (error) {
+        console.error('Chat error:', error);
+        aiMsg.innerHTML = `<strong>AI:</strong> Sorry, I encountered an error. Please try again.`;
+    }
+
+    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
