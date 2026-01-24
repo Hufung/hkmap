@@ -472,6 +472,12 @@ function setupUIControls() {
         layerHeader.click();
     }
 
+    // Open AI Chat accordion by default
+    const aiChatHeader = document.querySelector('#ai-chat-container').previousElementSibling;
+    if (aiChatHeader) {
+        aiChatHeader.click();
+    }
+
     // Chat listeners
     const chatInput = document.getElementById('chat-input');
     const sendChatBtn = document.getElementById('send-chat-btn');
